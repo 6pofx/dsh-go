@@ -153,33 +153,45 @@ export class OpencodeUsageGateway extends TypertRemoteService {
   }
 
   async fetchAccount(key) {
-    let res;
-    try {
-      res = await fetch(this.config.baseUrl || DEFAULT_BASE_URL, {
-        headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
-        signal: AbortSignal.timeout(this.config.timeoutMs || DEFAULT_TIMEOUT_MS),
-      });
-    } catch {
-      return { account: null, error: "network" };
+    const baseUrl = this.config.baseUrl || DEFAULT_BASE_URL;
+    const timeoutMs = this.config.timeoutMs || DEFAULT_TIMEOUT_MS;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        console.log("[dsh-go] fetch retry", attempt + 1, "after:", String(lastErr && lastErr.message || lastErr));
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
+      let res;
+      try {
+        res = await fetch(baseUrl, {
+          headers: { Authorization: `Bearer ${key}`, Accept: "application/json", Connection: "close" },
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+      } catch (e) {
+        lastErr = e;
+        console.log("[dsh-go] fetch attempt", attempt + 1, "failed:", String(e && e.message || e));
+        continue;
+      }
+      if (res.status === 401) return { account: null, error: "unauthorized" };
+      if (res.status === 403) return { account: null, error: "no-subscription" };
+      if (!res.ok) return { account: null, error: `http-${res.status}` };
+      let body;
+      try {
+        body = await res.json();
+      } catch {
+        return { account: null, error: "bad-json" };
+      }
+      const usage = body && typeof body === "object" && body.usage ? body.usage : body;
+      return {
+        account: {
+          rolling: pickWindow(usage && usage.rolling),
+          weekly: pickWindow(usage && usage.weekly),
+          monthly: pickWindow(usage && usage.monthly),
+        },
+        error: null,
+      };
     }
-    if (res.status === 401) return { account: null, error: "unauthorized" };
-    if (res.status === 403) return { account: null, error: "no-subscription" };
-    if (!res.ok) return { account: null, error: `http-${res.status}` };
-    let body;
-    try {
-      body = await res.json();
-    } catch {
-      return { account: null, error: "bad-json" };
-    }
-    const usage = body && typeof body === "object" && body.usage ? body.usage : body;
-    return {
-      account: {
-        rolling: pickWindow(usage && usage.rolling),
-        weekly: pickWindow(usage && usage.weekly),
-        monthly: pickWindow(usage && usage.monthly),
-      },
-      error: null,
-    };
+    return { account: null, error: "network" };
   }
 
   ensureScan(force) {

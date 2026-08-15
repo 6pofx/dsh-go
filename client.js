@@ -360,7 +360,7 @@ window.__ModuleLoader__.load({
         }
         let store = null;
         try {
-          const svc = ctx.get("modelDirectories");
+          const svc = ctxRef.get("modelDirectories");
           if (svc !== undefined && typeof svc.directoryFor === "function") store = svc.directoryFor(sessionId).store;
         } catch (e) { store = null; }
         if (!store) {
@@ -428,24 +428,31 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // Module-scope data layer: components are defined at factory scope, so
+    // the RPC bindings must live here too. ctxRef/mountReady/timer are set by
+    // apply() before any component renders (slots register inside apply).
+    let ctxRef = null;
+    let mountReady = null;
+    let timer = undefined;
+    const query = async () => {
+      await mountReady;
+      const api = ctxRef.get("remote.opencodeUsage");
+      if (!api) throw new Error("opencodeUsage remote is unavailable");
+      return api.usage();
+    };
+    const refreshRemote = async () => {
+      await mountReady;
+      const api = ctxRef.get("remote.opencodeUsage");
+      if (!api) return null;
+      return api.refresh();
+    };
+
     function apply(ctx) {
-      const mountReady = ctx.remote.$mount(TYPERT_REMOTE);
+      ctxRef = ctx;
+      mountReady = ctx.remote.$mount(TYPERT_REMOTE);
+      timer = ctx.get("timer");
       const slots = ctx.get("slots");
       if (slots === undefined) return;
-      const timer = ctx.get("timer");
-
-      const query = async () => {
-        await mountReady;
-        const api = ctx.get("remote.opencodeUsage");
-        if (!api) throw new Error("opencodeUsage remote is unavailable");
-        return api.usage();
-      };
-      const refreshRemote = async () => {
-        await mountReady;
-        const api = ctx.get("remote.opencodeUsage");
-        if (!api) return null;
-        return api.refresh();
-      };
 
       slots.inject("settings.section", () => slots.register(
         { name: "settings.section", id: "opencode-go-usage", order: 40, label: () => "OpenCode GO 用量" },

@@ -1,9 +1,9 @@
-// OpenCode GO 用量插件 — Client 半（动态插件快照 v11，pkg-26）
+// OpenCode GO 用量插件 — Client 半（动态插件快照 v12，pkg-27）
 //
 // 通过 cordis_define 的 code.client 加载。功能：
 //  - 设置页侧边栏「OpenCode GO 用量」：三窗口环形图卡片 + GO 模型用量表
+//  - GO 模型用量表：简洁/详细模式切换（详细拆分输入/输出/缓存命中）
 //  - 输入框下方迷你条：5h/周/月 百分比 + 悬浮三窗口横条面板 + 点击刷新
-//  - GO 模型用量：简洁/详细 由 v12 加入（本文件为 v11 快照）
 //  - 仅当前对话模型 provider 为 opencode-go 时显示迷你条
 //
 // 正式版安装时需转为浏览器 bundle（window.__ModuleLoader__.load）格式。
@@ -73,6 +73,9 @@ return {
       row: { display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--dsw-alias-label-secondary)', gap: 8, flexWrap: 'wrap' },
       button: { alignSelf: 'flex-start', border: '1px solid var(--dsw-alias-border-l2)', color: 'var(--dsw-alias-label-primary)', font: 'inherit', cursor: 'pointer', background: 'transparent', borderRadius: 6, padding: '5px 12px' },
       sectionTitle: { fontSize: 14, fontWeight: 600, margin: '8px 0 0 0' },
+      toggleRow: { display: 'flex', gap: 4, alignItems: 'center', margin: '2px 0' },
+      toggleBtn: { border: '1px solid var(--dsw-alias-border-l2)', background: 'transparent', color: 'var(--dsw-alias-label-secondary)', font: 'inherit', fontSize: 12, cursor: 'pointer', borderRadius: 6, padding: '2px 10px' },
+      toggleOn: { border: '1px solid var(--dsw-alias-brand-primary)', color: 'var(--dsw-alias-label-primary)', fontWeight: 600, background: 'transparent' },
       table: { borderCollapse: 'collapse', width: '100%', fontSize: 12 },
       th: { textAlign: 'left', color: 'var(--dsw-alias-label-secondary)', fontWeight: 500, padding: '4px 8px', borderBottom: '1px solid var(--dsw-alias-border-l1)', whiteSpace: 'nowrap' },
       td: { padding: '5px 8px', borderBottom: '1px solid var(--dsw-alias-border-l1)', color: 'var(--dsw-alias-label-primary)', verticalAlign: 'middle' },
@@ -129,55 +132,85 @@ return {
 
     function GoModelSection(props) {
       const { dsh } = props
+      const [detail, setDetail] = React.useState(false)
       if (!dsh) return null
       const scanning = dsh.scanning === true
       const models = dsh.models && dsh.models.length ? dsh.models : []
       const totalCost = models.reduce((s, m) => s + (m.estCost || 0), 0)
       const totalTokens = models.reduce((s, m) => s + m.totalTokens, 0)
+      const totalInput = models.reduce((s, m) => s + m.inputTokens, 0)
+      const totalOutput = models.reduce((s, m) => s + m.outputTokens, 0)
+      const totalCache = models.reduce((s, m) => s + m.cacheReadTokens, 0)
       const maxDay = dsh.byDay && dsh.byDay.length ? Math.max.apply(null, dsh.byDay.map(d => d.cost)) : 0
+      const toggle = React.createElement('div', { style: styles.toggleRow },
+        React.createElement('button', { style: { ...styles.toggleBtn, ...(detail ? {} : styles.toggleOn) }, onClick: () => setDetail(false) }, '简洁'),
+        React.createElement('button', { style: { ...styles.toggleBtn, ...(detail ? styles.toggleOn : {}) }, onClick: () => setDetail(true) }, '详细')
+      )
       if (!scanning && models.length === 0) {
         return React.createElement('div', null,
           React.createElement('h3', { style: styles.sectionTitle }, 'GO 套餐模型用量（DSH 会话 · 近 30 天）'),
           React.createElement('p', { style: styles.hint }, '统计自 DSH 会话日志中 provider 为 opencode-go 的请求。金额按 OpenCode 官方 GO 单价估算，非账单金额。')
         )
       }
+      const headCells = detail
+        ? [
+            React.createElement('th', { key: 'm', style: styles.th }, '模型'),
+            React.createElement('th', { key: 'i', style: styles.th }, '输入'),
+            React.createElement('th', { key: 'o', style: styles.th }, '输出'),
+            React.createElement('th', { key: 'c', style: styles.th }, '缓存命中'),
+            React.createElement('th', { key: 'amt', style: styles.th }, '估算金额'),
+            React.createElement('th', { key: 'share', style: styles.th }, '金额占比')
+          ]
+        : [
+            React.createElement('th', { key: 'm', style: styles.th }, '模型'),
+            React.createElement('th', { key: 't', style: styles.th }, 'Token 用量'),
+            React.createElement('th', { key: 'amt', style: styles.th }, '估算金额'),
+            React.createElement('th', { key: 'share', style: styles.th }, '金额占比')
+          ]
+      const rows = models.map((m, i) => {
+        const cells = []
+        cells.push(React.createElement('td', { key: 'm', style: styles.td },
+          React.createElement('span', { style: styles.modelName }, m.model),
+          React.createElement('span', { style: styles.modelSub }, ' · ' + m.count + ' 条')
+        ))
+        if (detail) {
+          cells.push(React.createElement('td', { key: 'i', style: styles.td }, fmtTokens(m.inputTokens)))
+          cells.push(React.createElement('td', { key: 'o', style: styles.td }, fmtTokens(m.outputTokens)))
+          cells.push(React.createElement('td', { key: 'c', style: styles.td }, fmtTokens(m.cacheReadTokens)))
+        } else {
+          cells.push(React.createElement('td', { key: 't', style: styles.td, title: '输入 ' + fmtTokens(m.inputTokens) + ' · 输出 ' + fmtTokens(m.outputTokens) + ' · 缓存 ' + fmtTokens(m.cacheReadTokens) }, fmtTokens(m.totalTokens)))
+        }
+        cells.push(React.createElement('td', { key: 'amt', style: styles.td }, fmtMoney4(m.estCost)))
+        cells.push(React.createElement('td', { key: 'share', style: styles.td },
+          React.createElement('div', { style: styles.shareCell },
+            React.createElement('div', { style: styles.shareTrack },
+              React.createElement('div', { style: { ...styles.shareFill, width: (totalCost > 0 ? Math.round((m.estCost || 0) / totalCost * 100) : 0) + '%' } })
+            ),
+            React.createElement('span', { style: styles.sharePct }, totalCost > 0 ? Math.round((m.estCost || 0) / totalCost * 100) + '%' : '—')
+          )
+        ))
+        return React.createElement('tr', { key: i }, cells)
+      })
+      const totalCells = []
+      totalCells.push(React.createElement('td', { key: 'm', style: styles.tdTotal }, '总计'))
+      if (detail) {
+        totalCells.push(React.createElement('td', { key: 'i', style: styles.tdTotal }, fmtTokens(totalInput)))
+        totalCells.push(React.createElement('td', { key: 'o', style: styles.tdTotal }, fmtTokens(totalOutput)))
+        totalCells.push(React.createElement('td', { key: 'c', style: styles.tdTotal }, fmtTokens(totalCache)))
+      } else {
+        totalCells.push(React.createElement('td', { key: 't', style: styles.tdTotal }, fmtTokens(totalTokens)))
+      }
+      totalCells.push(React.createElement('td', { key: 'amt', style: styles.tdTotal }, fmtMoney4(totalCost)))
+      totalCells.push(React.createElement('td', { key: 'share', style: styles.tdTotal }, '—'))
       return React.createElement('div', null,
         React.createElement('h3', { style: styles.sectionTitle }, 'GO 套餐模型用量（DSH 会话 · 近 30 天）'),
         React.createElement('p', { style: styles.hint }, '统计自 DSH 会话日志中 provider 为 opencode-go 的请求。金额按 OpenCode 官方 GO 单价估算，非账单金额。' + (scanning ? '（正在统计…）' : '')),
+        toggle,
         React.createElement('div', { style: styles.card },
           React.createElement('div', { style: styles.cardBody },
             scanning && models.length === 0 ? React.createElement('p', { style: styles.hint }, '正在统计 GO 用量…（首次扫描会话日志约需 10-30 秒，完成后自动显示）') : React.createElement('table', { style: styles.table },
-              React.createElement('thead', null, React.createElement('tr', null,
-                React.createElement('th', { style: styles.th }, '模型'),
-                React.createElement('th', { style: styles.th }, 'Token 用量'),
-                React.createElement('th', { style: styles.th }, '估算金额'),
-                React.createElement('th', { style: styles.th }, '金额占比'))),
-              React.createElement('tbody', null,
-                models.map((m, i) => React.createElement('tr', { key: i },
-                  React.createElement('td', { style: styles.td },
-                    React.createElement('span', { style: styles.modelName }, m.model),
-                    React.createElement('span', { style: styles.modelSub }, ' · ' + m.count + ' 条')
-                  ),
-                  React.createElement('td', { style: styles.td, title: '输入 ' + fmtTokens(m.inputTokens) + ' · 输出 ' + fmtTokens(m.outputTokens) + ' · 缓存 ' + fmtTokens(m.cacheReadTokens) },
-                    fmtTokens(m.totalTokens)
-                  ),
-                  React.createElement('td', { style: styles.td }, fmtMoney4(m.estCost)),
-                  React.createElement('td', { style: styles.td },
-                    React.createElement('div', { style: styles.shareCell },
-                      React.createElement('div', { style: styles.shareTrack },
-                        React.createElement('div', { style: { ...styles.shareFill, width: (totalCost > 0 ? Math.round((m.estCost || 0) / totalCost * 100) : 0) + '%' } })
-                      ),
-                      React.createElement('span', { style: styles.sharePct }, totalCost > 0 ? Math.round((m.estCost || 0) / totalCost * 100) + '%' : '—')
-                    )
-                  )
-                )),
-                models.length > 1 ? React.createElement('tr', { key: 'total' },
-                  React.createElement('td', { style: styles.tdTotal }, '总计'),
-                  React.createElement('td', { style: styles.tdTotal }, fmtTokens(totalTokens)),
-                  React.createElement('td', { style: styles.tdTotal }, fmtMoney4(totalCost)),
-                  React.createElement('td', { style: styles.tdTotal }, '—')
-                ) : null
-              )
+              React.createElement('thead', null, React.createElement('tr', null, headCells)),
+              React.createElement('tbody', null, rows, models.length > 1 ? React.createElement('tr', { key: 'total' }, totalCells) : null)
             )
           )
         ),

@@ -438,13 +438,18 @@ window.__ModuleLoader__.load({
       await mountReady;
       const api = ctxRef.get("remote.opencodeUsage");
       if (!api) throw new Error("opencodeUsage remote is unavailable");
-      return api.usage();
+      const result = await api.usage();
+      if (!result || result.ok === false) {
+        throw new Error((result && result.error && result.error.message) || "remote failed");
+      }
+      return result.value;
     };
     const refreshRemote = async () => {
       await mountReady;
       const api = ctxRef.get("remote.opencodeUsage");
       if (!api) return null;
-      return api.refresh();
+      const result = await api.refresh();
+      return result && result.value !== undefined ? result.value : result;
     };
 
     function apply(ctx) {

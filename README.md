@@ -22,9 +22,17 @@
 
 ## 📸 截图
 
-| 设置页：三窗口环形图 + 按模型用量 | 输入框迷你条 | 悬浮详情面板 |
-| --- | --- | --- |
-| ![设置页](docs/images/screenshot-1.png) | ![输入框迷你条](docs/images/screenshot-2.png) | ![悬浮详情面板](docs/images/screenshot-3.png) |
+**设置页：三窗口环形图 + 按模型用量**
+
+![设置页](docs/images/screenshot-1.png)
+
+**详细模型用量查询**
+
+![详细模型用量查询](docs/images/screenshot-2.png)
+
+**悬浮详情面板**
+
+![悬浮详情面板](docs/images/screenshot-3.png)
 
 ---
 

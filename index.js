@@ -24,6 +24,7 @@ const DEFAULT_BASE_URL = "https://opencode.ai/zen/go/v1/usage";
 const DEFAULT_TIMEOUT_MS = 15000;
 const DSH_DAYS = 30;
 const DSH_INTERVAL = 300000;
+const QUICK_SCAN_LIMIT = 4;
 
 // Official OpenCode GO per-1M-token prices (go.mdx). Values in USD.
 const GO_PRICES = {
@@ -96,11 +97,12 @@ export class OpencodeUsageGateway extends TypertRemoteService {
   constructor(ctx, config) {
     super(ctx, "opencodeUsage");
     this.config = config ?? {};
+    this.sessionAggs = new Map();
     this.dshState = { data: null, scanning: false, nextScan: 0 };
     ctx.effect(() => {
-      this.ensureScan(true);
+      this.ensureScan("full");
       const timer = this.ctx.timer;
-      if (timer !== undefined) return timer.interval(() => this.ensureScan(false), DSH_INTERVAL);
+      if (timer !== undefined) return timer.interval(() => this.ensureScan("full"), DSH_INTERVAL);
       return () => {};
     });
   }
@@ -134,7 +136,7 @@ export class OpencodeUsageGateway extends TypertRemoteService {
   }
 
   async refresh() {
-    this.ensureScan(true);
+    this.ensureScan("quick");
     return { triggered: true };
   }
 
@@ -176,12 +178,12 @@ export class OpencodeUsageGateway extends TypertRemoteService {
     return { account: null, error: "network" };
   }
 
-  ensureScan(force) {
+  ensureScan(mode) {
     const now = Date.now();
     if (this.dshState.scanning) return;
-    if (!force && this.dshState.data && now < this.dshState.nextScan) return;
+    if (mode !== "quick" && this.dshState.data && now < this.dshState.nextScan) return;
     this.dshState.scanning = true;
-    this.aggregateDsh()
+    this.aggregateDsh(mode === "quick")
       .then((data) => {
         this.dshState.data = data;
         this.dshState.nextScan = Date.now() + DSH_INTERVAL;
@@ -192,12 +194,45 @@ export class OpencodeUsageGateway extends TypertRemoteService {
       });
   }
 
-  async aggregateDsh() {
+  // Scan one session's events into per-session aggregates (models + daily cost).
+  async scanSession(sid, cutoff) {
+    const sq = this.ctx.sessionQuery;
+    const byModel = {};
+    const dayCosts = {};
+    const snap = await sq.readSession(sid);
+    const events = snap.events || [];
+    for (const ev of events) {
+      if (ev.type !== "assistant/message" || !ev.data || !ev.data.usage) continue;
+      const t = ev.time || 0;
+      if (t < cutoff) continue;
+      const src = ev.data.message && ev.data.message.source;
+      const provider = src && typeof src.provider === "string" ? src.provider : "unknown";
+      if (provider !== "opencode-go") continue;
+      const model = src && typeof src.model === "string" ? src.model : "unknown";
+      const u = ev.data.usage;
+      const b = byModel[model] || (byModel[model] = { count: 0, input: 0, output: 0, cacheRead: 0 });
+      b.count++;
+      b.input += u.inputTokens || 0;
+      b.output += u.outputTokens || 0;
+      b.cacheRead += u.cacheReadTokens || 0;
+      const price = GO_PRICES[model];
+      if (price) {
+        const d = new Date(t);
+        const day = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+        const cost = (u.inputTokens || 0) * price.in / 1e6 + (u.outputTokens || 0) * price.out / 1e6 + (u.cacheReadTokens || 0) * price.cache / 1e6;
+        dayCosts[day] = (dayCosts[day] || 0) + cost;
+      }
+    }
+    return { byModel, dayCosts };
+  }
+
+  // aggregateDsh(quick): quick scans only the newest sessions and merges them
+  // with per-session caches from the last full scan, so a user-triggered
+  // refresh stays fast (~a few seconds) without losing older sessions' data.
+  async aggregateDsh(quick) {
     const sq = this.ctx.sessionQuery;
     if (sq === undefined) return null;
     const cutoff = Date.now() - DSH_DAYS * 24 * 3600 * 1000;
-    const byModel = {};
-    const dayCosts = {};
     const started = Date.now();
     let sessions;
     try {
@@ -205,44 +240,34 @@ export class OpencodeUsageGateway extends TypertRemoteService {
     } catch {
       return null;
     }
-    const recent = sessions
-      .filter((s) => (s.header && s.header.createdAt || 0) >= cutoff)
-      .slice(0, 15);
-    const readOne = (rec) => {
+    const recent = sessions.filter((s) => (s.header && s.header.createdAt || 0) >= cutoff);
+    const targets = quick ? recent.slice(0, QUICK_SCAN_LIMIT) : recent;
+    await Promise.all(targets.map(async (rec) => {
       const sid = rec.header && rec.header.id;
-      return sq
-        .readSession(sid)
-        .then((snap) => {
-          const events = snap.events || [];
-          for (const ev of events) {
-            if (ev.type !== "assistant/message" || !ev.data || !ev.data.usage) continue;
-            const t = ev.time || 0;
-            if (t < cutoff) continue;
-            const src = ev.data.message && ev.data.message.source;
-            const provider = src && typeof src.provider === "string" ? src.provider : "unknown";
-            if (provider !== "opencode-go") continue;
-            const model = src && typeof src.model === "string" ? src.model : "unknown";
-            const u = ev.data.usage;
-            const b = byModel[model] || (byModel[model] = { count: 0, input: 0, output: 0, cacheRead: 0 });
-            b.count++;
-            b.input += u.inputTokens || 0;
-            b.output += u.outputTokens || 0;
-            b.cacheRead += u.cacheReadTokens || 0;
-            const price = GO_PRICES[model];
-            if (price) {
-              const d = new Date(t);
-              const day = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-              const cost = (u.inputTokens || 0) * price.in / 1e6 + (u.outputTokens || 0) * price.out / 1e6 + (u.cacheReadTokens || 0) * price.cache / 1e6;
-              dayCosts[day] = (dayCosts[day] || 0) + cost;
-            }
-          }
-        })
-        .catch(() => {});
-    };
-    await Promise.all(recent.map(readOne));
-    const models = Object.keys(byModel)
+      if (!sid) return;
+      try {
+        this.sessionAggs.set(sid, await this.scanSession(sid, cutoff));
+      } catch {
+        /* keep the previous aggregate for this session */
+      }
+    }));
+    const totals = { byModel: {}, dayCosts: {} };
+    for (const agg of this.sessionAggs.values()) {
+      for (const model in agg.byModel) {
+        const s = totals.byModel[model] || (totals.byModel[model] = { count: 0, input: 0, output: 0, cacheRead: 0 });
+        const b = agg.byModel[model];
+        s.count += b.count;
+        s.input += b.input;
+        s.output += b.output;
+        s.cacheRead += b.cacheRead;
+      }
+      for (const day in agg.dayCosts) {
+        totals.dayCosts[day] = (totals.dayCosts[day] || 0) + agg.dayCosts[day];
+      }
+    }
+    const models = Object.keys(totals.byModel)
       .map((model) => {
-        const b = byModel[model];
+        const b = totals.byModel[model];
         const totalTokens = b.input + b.output + b.cacheRead;
         const price = GO_PRICES[model];
         const estRaw = price ? (b.input * price.in + b.output * price.out + b.cacheRead * price.cache) / 1e6 : null;
@@ -258,13 +283,13 @@ export class OpencodeUsageGateway extends TypertRemoteService {
         };
       })
       .sort((a, b) => (b.estCost || 0) - (a.estCost || 0));
-    const days = Object.keys(dayCosts)
+    const days = Object.keys(totals.dayCosts)
       .sort()
-      .map((day) => ({ day, cost: Math.round(dayCosts[day] * 10000) / 10000 }));
+      .map((day) => ({ day, cost: Math.round(totals.dayCosts[day] * 10000) / 10000 }));
     return {
       models,
       byDay: days,
-      scannedSessions: recent.length,
+      scannedSessions: targets.length,
       durationMs: Date.now() - started,
     };
   }

@@ -63,23 +63,19 @@ export const Config = z.object({
 async function resolveApiKey(ctx) {
   try {
     const cred = await ctx.credentials.resolve(credentialRef("OPENCODE_GO_API_KEY"));
-    console.log("[dsh-go] credentials.resolve ->", cred && cred.value ? "found" : "undefined");
     if (cred && cred.value) return { key: cred.value, source: "credentials" };
-  } catch (e) {
-    console.log("[dsh-go] credentials.resolve threw:", String(e && e.message || e));
+  } catch {
+    /* fall through */
   }
   try {
     const authPath = join(homedir(), ".local", "share", "opencode", "auth.json");
-    const exists = existsSync(authPath);
-    console.log("[dsh-go] auth path:", authPath, "exists:", exists, "homedir:", homedir());
-    if (!exists) return { key: null, source: null };
+    if (!existsSync(authPath)) return { key: null, source: null };
     const raw = JSON.parse(await readFile(authPath, "utf8"));
     const entry = raw["opencode-go"] ?? raw["opencode"];
     const ok = entry && entry.type === "api" && typeof entry.key === "string" && entry.key.length > 0;
-    console.log("[dsh-go] auth.json entry:", entry ? "type=" + entry.type + " hasKey=" + ok : "none");
     if (ok) return { key: entry.key, source: "auth.json" };
-  } catch (e) {
-    console.log("[dsh-go] auth.json read threw:", String(e && e.message || e));
+  } catch {
+    /* fall through */
   }
   return { key: null, source: null };
 }
@@ -103,7 +99,6 @@ export class OpencodeUsageGateway extends TypertRemoteService {
     this.config = config ?? {};
     this.cache = null;
     this.dshState = { data: null, scanning: false, nextScan: 0 };
-    console.log("[dsh-go] host loaded, USERPROFILE=", process.env.USERPROFILE, "HOME=", process.env.HOME, "cwd=", process.cwd());
     ctx.effect(() => {
       this.ensureScan(true);
       const timer = this.ctx.timer;
@@ -130,7 +125,6 @@ export class OpencodeUsageGateway extends TypertRemoteService {
     const accountResult = ki.key
       ? await this.fetchAccount(ki.key)
       : { account: null, error: "no-key" };
-    console.log("[dsh-go] usage: keySource=", ki.source, "accountError=", accountResult.error, "dshReady=", !!this.dshState.data, "scanning=", this.dshState.scanning);
 
     const dshPayload = this.dshState.data || { models: [], byDay: [], scannedSessions: 0, durationMs: 0 };
     const data = {
@@ -155,10 +149,8 @@ export class OpencodeUsageGateway extends TypertRemoteService {
   async fetchAccount(key) {
     const baseUrl = this.config.baseUrl || DEFAULT_BASE_URL;
     const timeoutMs = this.config.timeoutMs || DEFAULT_TIMEOUT_MS;
-    let lastErr = null;
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) {
-        console.log("[dsh-go] fetch retry", attempt + 1, "after:", String(lastErr && lastErr.message || lastErr));
         await new Promise((r) => setTimeout(r, 1000 * attempt));
       }
       let res;
@@ -167,9 +159,7 @@ export class OpencodeUsageGateway extends TypertRemoteService {
           headers: { Authorization: `Bearer ${key}`, Accept: "application/json", Connection: "close" },
           signal: AbortSignal.timeout(timeoutMs),
         });
-      } catch (e) {
-        lastErr = e;
-        console.log("[dsh-go] fetch attempt", attempt + 1, "failed:", String(e && e.message || e));
+      } catch {
         continue;
       }
       if (res.status === 401) return { account: null, error: "unauthorized" };

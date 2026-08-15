@@ -22,7 +22,6 @@ import { existsSync } from "node:fs";
 
 const DEFAULT_BASE_URL = "https://opencode.ai/zen/go/v1/usage";
 const DEFAULT_TIMEOUT_MS = 15000;
-const CACHE_MS = 60000;
 const DSH_DAYS = 30;
 const DSH_INTERVAL = 300000;
 
@@ -97,7 +96,6 @@ export class OpencodeUsageGateway extends TypertRemoteService {
   constructor(ctx, config) {
     super(ctx, "opencodeUsage");
     this.config = config ?? {};
-    this.cache = null;
     this.dshState = { data: null, scanning: false, nextScan: 0 };
     ctx.effect(() => {
       this.ensureScan(true);
@@ -108,11 +106,6 @@ export class OpencodeUsageGateway extends TypertRemoteService {
   }
 
   async usage() {
-    const now = Date.now();
-    if (this.cache && now - this.cache.at < CACHE_MS) {
-      return { ...this.cache.data, dsh: { ...(this.cache.data.dsh || {}), scanning: this.dshState.scanning } };
-    }
-
     let goInModels = null;
     try {
       const pi = this.ctx.settings.get(settingsNamespace("llm-pi-ai"));
@@ -121,13 +114,15 @@ export class OpencodeUsageGateway extends TypertRemoteService {
       goInModels = null;
     }
 
+    // No account cache: every call refetches the official API so fetchedAt is
+    // always fresh (the account call is cheap; the DSH aggregate stays cached).
     const ki = await resolveApiKey(this.ctx);
     const accountResult = ki.key
       ? await this.fetchAccount(ki.key)
       : { account: null, error: "no-key" };
 
     const dshPayload = this.dshState.data || { models: [], byDay: [], scannedSessions: 0, durationMs: 0 };
-    const data = {
+    return {
       fetchedAt: Date.now(),
       keySource: ki.source,
       goInModels,
@@ -136,12 +131,9 @@ export class OpencodeUsageGateway extends TypertRemoteService {
       dsh: { ...dshPayload, scanning: this.dshState.scanning },
       dshError: this.dshState.data ? null : "scanning",
     };
-    this.cache = { at: Date.now(), data };
-    return data;
   }
 
   async refresh() {
-    this.cache = null;
     this.ensureScan(true);
     return { triggered: true };
   }

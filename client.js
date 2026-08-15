@@ -350,9 +350,14 @@ window.__ModuleLoader__.load({
       }, []);
       const onDockClick = React.useCallback(() => {
         setClicked(true);
-        Promise.resolve().then(() => refreshRemote()).catch(() => {}).then(() => refresh()).catch(() => setClicked(false));
-        setClicked(false);
-      }, [refresh]);
+        Promise.resolve()
+          .then(() => refreshRemote())
+          .catch(() => {})
+          .then(() => query())
+          .then((d) => setData(d))
+          .catch(() => setData(null))
+          .then(() => setClicked(false));
+      }, []);
       React.useEffect(() => {
         if (sessionId === undefined) {
           console.log("[ocg] dock: no sessionId prop");

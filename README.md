@@ -9,19 +9,30 @@
 
 ## 安装
 
+> ⚠️ Windows 注意：pnpm 对跨盘符目录依赖（`link:G:/dsh-go`）存在路径解析 bug（会把盘符当相对路径），
+> 本地安装请走 **tarball 流程**（见下）。
+
 ```sh
-# 1. 安装插件到 web profile（当前目录即插件包）
-dsh plugin --profile web add G:\dsh-go
+# 1. 打包（在插件仓库目录）
+npm pack
 
-# 2. 在 profile patch 层加入插件行（$DSH_HOME/profiles/web/cordis.patch.yml）
-#    - insert:
-#        - id: opencode-go-usage
-#          name: 'dsh-go-usage'
+# 2. 把 tarball 拷到 profile 目录
+cp dsh-go-usage-0.1.0.tgz $DSH_HOME/profiles/web/
 
-# 3. 重启 dsh web 使 host 半与客户端 bundle 生效
+# 3. 加入依赖（触发 pnpm 物化 + bundle 层 reconcile）
+dsh plugin --profile web install
+# 若首次安装，先手动在 $DSH_HOME/profiles/web/package.json 的 dependencies 加入：
+#   "dsh-go-usage": "file:dsh-go-usage-0.1.0.tgz"
+# （reconcile 会把声明了 dsh.bundle 的包自动加入 dsh.profile.bundles）
+
+# 4. 重启 dsh web 使 host 半与客户端 bundle 生效
 ```
 
-插件依赖标准 web 组合（`api-gateway` 的 client Remote、`settings.section` 槽位、`modelDirectories` 服务），默认 `dsh web` profile 均已具备。
+插件通过 `dsh.bundle.patch`（`cordis.patch.yml`）自动注入插件行，无需手改 `cordis.patch.yml` 用户层。
+
+### 更新流程
+
+改代码后：`npm pack` → 覆盖拷贝 tarball 到 profile → `dsh plugin --profile web install` → 重启 `dsh web`。
 
 ## 配置
 

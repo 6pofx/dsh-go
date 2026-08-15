@@ -1,0 +1,7 @@
+# dsh-go-usage 插件行：作为 bundle patch 自动注入 web profile 组合
+- insert:
+    - id: opencode-go-usage
+      name: dsh-go-usage
+      config:
+        baseUrl: https://opencode.ai/zen/go/v1/usage
+        timeoutMs: 15000

@@ -96,29 +96,38 @@ window.__ModuleLoader__.load({
 
     // ---- Theme corner probe: follow themes that square app corners (e.g.
     // dsh-theme-endfield's `[class] { border-radius: 0 !important }`).
-    // We sample shipped card/panel/dialog elements; if the active theme
-    // zeroes their radius, our own cards/buttons follow suit.
-    let cornerState = { square: false, known: false };
+    // Default is SQUARE (the square-corner look is the theme's normal state);
+    // we switch to round only on clear evidence: the theme's own round-mode
+    // body class, or a majority of non-zero radii on shipped card/panel
+    // elements (base themes keep them rounded).
+    let cornerState = { square: true, known: false };
     const cornerListeners = new Set();
-    const CORNER_PROBE_SELECTOR = '[class*="card" i], [class*="panel" i], [class*="dialog" i], [class*="modal" i], [class*="popover" i]';
+    const CORNER_PROBE_SELECTOR = '[class*="card" i], [class*="panel" i], [class*="dialog" i], [class*="modal" i], [class*="popover" i], [class*="bubble" i]';
     function evaluateCorner() {
       try {
         if (typeof document === "undefined") return;
+        // Direct signal: themes that expose a round-mode toggle on body.
+        if (document.body.classList.contains("theme-endfield-round")) {
+          if (!cornerState.known || cornerState.square) {
+            cornerState.square = false;
+            cornerState.known = true;
+            cornerListeners.forEach((fn) => fn());
+          }
+          return;
+        }
         const els = document.querySelectorAll(CORNER_PROBE_SELECTOR);
         let zero = 0;
         let nonZero = 0;
-        let sampled = 0;
         for (const el of els) {
-          if (sampled >= 8) break;
+          if (zero + nonZero >= 8) break;
           const r = window.getComputedStyle(el).borderRadius;
           const v = parseFloat(r);
           if (Number.isFinite(v) && v > 0) nonZero++;
           else zero++;
-          sampled++;
         }
-        // Need enough samples; square only when a clear majority is zeroed.
-        if (sampled < 3) return;
-        const square = zero >= 3 && zero > nonZero;
+        // Need at least two samples; square only when zeroed elements lead.
+        if (zero + nonZero < 2) return;
+        const square = zero >= 2 && zero > nonZero;
         if (square !== cornerState.square || !cornerState.known) {
           cornerState.square = square;
           cornerState.known = true;

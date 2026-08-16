@@ -16,6 +16,7 @@
 | 📊 **按模型用量** | 从 DSH 会话日志聚合 provider 为 `opencode-go` 的请求：每个模型的 Token 用量与估算金额；**简洁 / 详细**模式切换（详细拆分输入 / 输出 / 缓存命中） |
 | 📈 **每日趋势** | 近 30 天每日 GO 花费（估算）迷你趋势图 |
 | 🪟 **输入框迷你条** | 仅当对话模型来自 GO 时显示 `5h / 周 / 月` 百分比；悬浮查看三窗口详情；**点击立即刷新** |
+| 🎨 **主题自适应** | 全部样式走 `--dsw-alias-*` 主题变量（带明暗兜底），阴影用 `color-mix` 取主题色；圆角通过**通用元素探测**（默认直角 + 多数决 + 挂载/增删重探）自动跟随直角 / 圆角主题，不针对任何主题特化 |
 | 🔑 **Key 自动解析** | `OPENCODE_GO_API_KEY` 凭据 → `auth.json`（opencode-go → opencode），无需手动配置 |
 
 入口：**设置侧边栏 →「OpenCode GO 用量」** + **对话输入框下方迷你条**。
@@ -47,14 +48,14 @@ dsh plugin --profile web add github:6pofx/dsh-go
 本地开发 / 离线安装（tarball 流程，Windows 上 `link:` 目录依赖有 pnpm 盘符 bug，勿用目录直连）：
 
 ```sh
-# 1. 打包
+# 1. 打包（产物为 dsh-go-usage-<版本>.tgz，如 dsh-go-usage-0.1.14.tgz）
 npm pack
 
 # 2. 拷到 profile 目录
-cp dsh-go-0.1.0.tgz $DSH_HOME/profiles/web/
+cp dsh-go-usage-*.tgz $DSH_HOME/profiles/web/
 
 # 3. 首次安装需在 $DSH_HOME/profiles/web/package.json 的 dependencies 加入：
-#    "dsh-go": "file:dsh-go-0.1.0.tgz"
+#    "dsh-go-usage": "file:dsh-go-usage-0.1.14.tgz"
 
 # 4. 物化依赖 + 自动注册 bundle 层（reconcile）
 dsh plugin --profile web install
@@ -68,7 +69,7 @@ dsh plugin --profile web install
 
 ```sh
 npm pack
-cp dsh-go-0.1.0.tgz $DSH_HOME/profiles/web/
+cp dsh-go-usage-*.tgz $DSH_HOME/profiles/web/
 dsh plugin --profile web install   # 或 git 源：dsh plugin --profile web update dsh-go
 # 重启 dsh web
 ```
@@ -117,7 +118,7 @@ dsh-go/
 ## 🧩 开发
 
 - **Host 半**：`index.js` 是纯 Node ESM，`fetch` / `node:fs` 原生可用；RPC 通过 Typert Remote（`opencodeUsage/usage`、`opencodeUsage/refresh`）
-- **Client 半**：`client.js` 是手写 lazy-CJS bundle，`React.createElement` 渲染、主题 CSS 变量适配明暗
+- **Client 半**：`client.js` 是手写 lazy-CJS bundle，`React.createElement` 渲染；所有颜色引用 `var(--dsw-alias-*, <兜底>)` 以自动适配任意主题（含魔改主题），圆角用通用元素探测跟随（无主题特化代码）
 - 本地改动后按「更新」流程重新打包安装
 
 ## ⚠️ 已知限制

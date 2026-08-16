@@ -119,7 +119,6 @@ window.__ModuleLoader__.load({
         // Need enough samples; square only when a clear majority is zeroed.
         if (sampled < 3) return;
         const square = zero >= 3 && zero > nonZero;
-        console.log("[dsh-go] corner probe: sampled=" + sampled + " zero=" + zero + " nonZero=" + nonZero + " -> " + (square ? "square" : "round"));
         if (square !== cornerState.square || !cornerState.known) {
           cornerState.square = square;
           cornerState.known = true;
@@ -438,7 +437,6 @@ window.__ModuleLoader__.load({
       }, []);
       React.useEffect(() => {
         if (sessionId === undefined) {
-          console.log("[ocg] dock: no sessionId prop");
           return;
         }
         let store = null;
@@ -447,7 +445,6 @@ window.__ModuleLoader__.load({
           if (svc !== undefined && typeof svc.directoryFor === "function") store = svc.directoryFor(sessionId).store;
         } catch (e) { store = null; }
         if (!store) {
-          console.log("[ocg] dock: modelDirectories unavailable");
           return;
         }
         setDirState(store.getSnapshot());

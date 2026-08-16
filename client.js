@@ -124,9 +124,20 @@ window.__ModuleLoader__.load({
         cornerListeners.forEach((fn) => fn());
       }
     }
+    // Throttled re-evaluation: DOM childList mutations (cards appearing) can
+    // change the probe result, but we must not run getComputedStyle per frame.
+    let cornerScheduled = false;
+    function scheduleCorner() {
+      if (cornerScheduled) return;
+      cornerScheduled = true;
+      setTimeout(() => { cornerScheduled = false; evaluateCorner(); }, 300);
+    }
     function useSquareCorner() {
       const [square, setSquare] = React.useState(cornerState.square);
       React.useEffect(() => {
+        // Re-probe on mount: the page may have had no probeable element when
+        // the plugin loaded, or the theme may have changed since.
+        evaluateCorner();
         const fn = () => setSquare(cornerState.square);
         cornerListeners.add(fn);
         return () => { cornerListeners.delete(fn); };
@@ -529,18 +540,31 @@ window.__ModuleLoader__.load({
       if (slots === undefined) return;
 
       // Theme corner sync: re-evaluate on theme changes (preference switch,
-      // override layers) and on body class flips (theme radius toggles).
+      // override layers), body class flips (theme radius toggles), and DOM
+      // growth (cards appearing), plus a few retries after load in case no
+      // probeable element exists yet.
       ctx.effect(() => {
         const offTheme = ctx.on ? ctx.on("theme/change", () => evaluateCorner()) : () => {};
         let obs = null;
         if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
-          obs = new MutationObserver(() => evaluateCorner());
-          obs.observe(document.body, { attributes: true, attributeFilter: ["class", "data-ds-dark-theme"] });
+          obs = new MutationObserver(() => scheduleCorner());
+          obs.observe(document.body, {
+            attributes: true,
+            attributeFilter: ["class", "data-ds-dark-theme"],
+            childList: true,
+            subtree: true,
+          });
+        }
+        const timerSvc = ctxRef.get("timer");
+        const retries = [];
+        if (timerSvc !== undefined) {
+          [1000, 3000, 8000, 15000].forEach((ms) => retries.push(timerSvc.timeout(() => evaluateCorner(), ms)));
         }
         evaluateCorner();
         return () => {
           offTheme();
           if (obs) obs.disconnect();
+          retries.forEach((d) => d());
         };
       });
 

@@ -71,9 +71,9 @@ window.__ModuleLoader__.load({
       return m + " 分钟后重置";
     };
     const barColor = (p) => {
-      if (p >= 90) return "var(--dsw-alias-state-error-primary)";
-      if (p >= 80) return "var(--dsw-alias-state-warn-primary)";
-      return "var(--dsw-alias-brand-primary)";
+      if (p >= 90) return "var(--dsw-alias-state-error-primary, #e5484d)";
+      if (p >= 80) return "var(--dsw-alias-state-warn-primary, #f5a623)";
+      return "var(--dsw-alias-brand-primary, #4c6ef5)";
     };
     const pctText = (w) => (w && typeof w.percent === "number" ? w.percent + "%" : "—");
 
@@ -86,65 +86,126 @@ window.__ModuleLoader__.load({
       const c = 2 * Math.PI * r;
       const offset = c * (1 - p / 100);
       const center = s / 2;
-      const trackCol = trackColor || "var(--dsw-alias-border-l2)";
+      const trackCol = trackColor || "var(--dsw-alias-border-l2, #c5c5c5)";
       return React.createElement("svg", { width: s, height: s, viewBox: "0 0 " + s + " " + s, style: { flexShrink: 0 } },
         React.createElement("circle", { key: "track", cx: center, cy: center, r: r, fill: "none", stroke: trackCol, strokeWidth: sw }),
         React.createElement("circle", { key: "arc", cx: center, cy: center, r: r, fill: "none", stroke: barColor(p), strokeWidth: sw, strokeLinecap: "round", strokeDasharray: c, strokeDashoffset: offset, transform: "rotate(-90 " + center + " " + center + ")" }),
-        textSize !== 0 ? React.createElement("text", { key: "label", x: "50%", y: "50%", textAnchor: "middle", dominantBaseline: "central", fontSize: textSize || Math.round(s * 0.24), fontWeight: 600, fill: "var(--dsw-alias-label-primary)" }, Math.round(p) + "%") : null
+        textSize !== 0 ? React.createElement("text", { key: "label", x: "50%", y: "50%", textAnchor: "middle", dominantBaseline: "central", fontSize: textSize || Math.round(s * 0.24), fontWeight: 600, fill: "var(--dsw-alias-label-primary, #1a1a1a)" }, Math.round(p) + "%") : null
       );
+    }
+
+    // ---- Theme corner probe: follow themes that square app corners (e.g.
+    // dsh-theme-endfield's `[class] { border-radius: 0 !important }`).
+    // We sample shipped card/panel/dialog elements; if the active theme
+    // zeroes their radius, our own cards/buttons follow suit.
+    let cornerState = { square: false, known: false };
+    const cornerListeners = new Set();
+    const CORNER_PROBE_SELECTOR = '[class*="card" i], [class*="panel" i], [class*="dialog" i], [class*="modal" i], [class*="popover" i]';
+    function evaluateCorner() {
+      let square = false;
+      let found = false;
+      try {
+        if (typeof document === "undefined") return;
+        const els = document.querySelectorAll(CORNER_PROBE_SELECTOR);
+        let sampled = 0;
+        for (const el of els) {
+          if (sampled >= 5) break;
+          const r = window.getComputedStyle(el).borderRadius;
+          const v = parseFloat(r);
+          if (Number.isFinite(v) && v > 0) { square = false; found = true; break; }
+          found = true;
+          sampled++;
+        }
+      } catch (e) { return; }
+      if (!found) return;
+      if (square !== cornerState.square || !cornerState.known) {
+        cornerState.square = square;
+        cornerState.known = true;
+        cornerListeners.forEach((fn) => fn());
+      }
+    }
+    function useSquareCorner() {
+      const [square, setSquare] = React.useState(cornerState.square);
+      React.useEffect(() => {
+        const fn = () => setSquare(cornerState.square);
+        cornerListeners.add(fn);
+        return () => { cornerListeners.delete(fn); };
+      }, []);
+      return square;
     }
 
     const styles = {
       wrap: { maxWidth: 720, display: "flex", flexDirection: "column", gap: 14, padding: "8px 0" },
       title: { fontSize: 16, fontWeight: 600, margin: 0 },
-      hint: { color: "var(--dsw-alias-label-secondary)", fontSize: 13, lineHeight: 1.6, margin: 0 },
-      error: { color: "var(--dsw-alias-state-error-primary)", fontSize: 13, lineHeight: 1.6, margin: 0 },
-      card: { border: "1px solid var(--dsw-alias-border-l2)", background: "var(--dsw-alias-bg-layer-1)", borderRadius: 10, padding: "14px 16px", display: "flex", gap: 14, alignItems: "center" },
+      hint: { color: "var(--dsw-alias-label-secondary, #6b6b6b)", fontSize: 13, lineHeight: 1.6, margin: 0 },
+      error: { color: "var(--dsw-alias-state-error-primary, #e5484d)", fontSize: 13, lineHeight: 1.6, margin: 0 },
+      card: { border: "1px solid var(--dsw-alias-border-l2, #c5c5c5)", background: "var(--dsw-alias-bg-layer-1, #f5f5f5)", borderRadius: 10, padding: "14px 16px", display: "flex", gap: 14, alignItems: "center" },
       cardBody: { display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 0 },
       cardHead: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 },
       cardName: { fontSize: 14, fontWeight: 600, margin: 0 },
-      cardMeta: { color: "var(--dsw-alias-label-secondary)", fontSize: 12, margin: 0 },
-      row: { display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--dsw-alias-label-secondary)", gap: 8, flexWrap: "wrap" },
-      button: { alignSelf: "flex-start", border: "1px solid var(--dsw-alias-border-l2)", color: "var(--dsw-alias-label-primary)", font: "inherit", cursor: "pointer", background: "transparent", borderRadius: 6, padding: "5px 12px" },
+      cardMeta: { color: "var(--dsw-alias-label-secondary, #6b6b6b)", fontSize: 12, margin: 0 },
+      row: { display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--dsw-alias-label-secondary, #6b6b6b)", gap: 8, flexWrap: "wrap" },
+      button: { alignSelf: "flex-start", border: "1px solid var(--dsw-alias-border-l2, #c5c5c5)", color: "var(--dsw-alias-label-primary, #1a1a1a)", font: "inherit", cursor: "pointer", background: "transparent", borderRadius: 6, padding: "5px 12px" },
       sectionTitle: { fontSize: 14, fontWeight: 600, margin: "8px 0 0 0" },
       toggleRow: { display: "flex", gap: 4, alignItems: "center", margin: "2px 0" },
-      toggleBtn: { border: "1px solid var(--dsw-alias-border-l2)", background: "transparent", color: "var(--dsw-alias-label-secondary)", font: "inherit", fontSize: 12, cursor: "pointer", borderRadius: 6, padding: "2px 10px" },
-      toggleOn: { border: "1px solid var(--dsw-alias-brand-primary)", color: "var(--dsw-alias-label-primary)", fontWeight: 600, background: "transparent" },
+      toggleBtn: { border: "1px solid var(--dsw-alias-border-l2, #c5c5c5)", background: "transparent", color: "var(--dsw-alias-label-secondary, #6b6b6b)", font: "inherit", fontSize: 12, cursor: "pointer", borderRadius: 6, padding: "2px 10px" },
+      toggleOn: { border: "1px solid var(--dsw-alias-brand-primary, #4c6ef5)", color: "var(--dsw-alias-label-primary, #1a1a1a)", fontWeight: 600, background: "transparent" },
       table: { borderCollapse: "collapse", width: "100%", fontSize: 12 },
-      th: { textAlign: "left", color: "var(--dsw-alias-label-secondary)", fontWeight: 500, padding: "4px 8px", borderBottom: "1px solid var(--dsw-alias-border-l1)", whiteSpace: "nowrap" },
-      td: { padding: "5px 8px", borderBottom: "1px solid var(--dsw-alias-border-l1)", color: "var(--dsw-alias-label-primary)", verticalAlign: "middle" },
-      tdTotal: { padding: "6px 8px", borderTop: "1px solid var(--dsw-alias-border-l2)", color: "var(--dsw-alias-label-primary)", fontWeight: 600, verticalAlign: "middle" },
-      modelName: { fontWeight: 600, color: "var(--dsw-alias-label-primary)" },
-      modelSub: { fontSize: 10, color: "var(--dsw-alias-label-secondary)", fontWeight: 400 },
+      th: { textAlign: "left", color: "var(--dsw-alias-label-secondary, #6b6b6b)", fontWeight: 500, padding: "4px 8px", borderBottom: "1px solid var(--dsw-alias-border-l1, #dcdcdc)", whiteSpace: "nowrap" },
+      td: { padding: "5px 8px", borderBottom: "1px solid var(--dsw-alias-border-l1, #dcdcdc)", color: "var(--dsw-alias-label-primary, #1a1a1a)", verticalAlign: "middle" },
+      tdTotal: { padding: "6px 8px", borderTop: "1px solid var(--dsw-alias-border-l2, #c5c5c5)", color: "var(--dsw-alias-label-primary, #1a1a1a)", fontWeight: 600, verticalAlign: "middle" },
+      modelName: { fontWeight: 600, color: "var(--dsw-alias-label-primary, #1a1a1a)" },
+      modelSub: { fontSize: 10, color: "var(--dsw-alias-label-secondary, #6b6b6b)", fontWeight: 400 },
       shareCell: { display: "flex", alignItems: "center", gap: 6 },
-      shareTrack: { width: 56, height: 5, borderRadius: 3, background: "var(--dsw-alias-border-l1)", overflow: "hidden", flexShrink: 0 },
-      shareFill: { height: "100%", borderRadius: 3, background: "var(--dsw-alias-brand-primary)" },
-      sharePct: { fontSize: 11, color: "var(--dsw-alias-label-secondary)", minWidth: 34, textAlign: "right" },
+      shareTrack: { width: 56, height: 5, borderRadius: 3, background: "var(--dsw-alias-border-l1, #dcdcdc)", overflow: "hidden", flexShrink: 0 },
+      shareFill: { height: "100%", borderRadius: 3, background: "var(--dsw-alias-brand-primary, #4c6ef5)" },
+      sharePct: { fontSize: 11, color: "var(--dsw-alias-label-secondary, #6b6b6b)", minWidth: 34, textAlign: "right" },
       spark: { display: "flex", alignItems: "flex-end", gap: 2, height: 40, marginTop: 6 },
-      bar: { flex: 1, minWidth: 2, background: "var(--dsw-alias-brand-primary)", borderRadius: "2px 2px 0 0" },
-      metaRow: { display: "flex", gap: 12, alignItems: "center", fontSize: 12, color: "var(--dsw-alias-label-secondary)" },
-      badge: { border: "1px solid var(--dsw-alias-border-l2)", borderRadius: 999, padding: "1px 8px", fontSize: 11 },
-      dock: { display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--dsw-alias-label-secondary)", lineHeight: 1, position: "relative", cursor: "pointer" },
-      dockTag: { fontWeight: 600, color: "var(--dsw-alias-label-primary)" },
+      bar: { flex: 1, minWidth: 2, background: "var(--dsw-alias-brand-primary, #4c6ef5)", borderRadius: "2px 2px 0 0" },
+      metaRow: { display: "flex", gap: 12, alignItems: "center", fontSize: 12, color: "var(--dsw-alias-label-secondary, #6b6b6b)" },
+      badge: { border: "1px solid var(--dsw-alias-border-l2, #c5c5c5)", borderRadius: 999, padding: "1px 8px", fontSize: 11 },
+      dock: { display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--dsw-alias-label-secondary, #6b6b6b)", lineHeight: 1, position: "relative", cursor: "pointer" },
+      dockTag: { fontWeight: 600, color: "var(--dsw-alias-label-primary, #1a1a1a)" },
       dockItem: { marginLeft: 6 },
-      popup: { position: "absolute", bottom: "calc(100% + 10px)", right: 0, zIndex: 60, background: "var(--dsw-alias-bg-overlay)", border: "1px solid var(--dsw-alias-border-l2)", borderRadius: 12, padding: "4px 12px 10px", width: 300, boxShadow: "0 8px 24px rgba(0,0,0,.3)" },
-      popupHead: { display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "8px 0 6px", borderBottom: "1px solid var(--dsw-alias-border-l1)" },
-      popupTitle: { fontSize: 12, fontWeight: 600, color: "var(--dsw-alias-label-primary)", margin: 0 },
-      popupMeta: { fontSize: 11, color: "var(--dsw-alias-label-secondary)" },
-      popupRow: { display: "flex", flexDirection: "column", gap: 5, padding: "8px 0", borderBottom: "1px solid var(--dsw-alias-border-l1)" },
+      popup: { position: "absolute", bottom: "calc(100% + 10px)", right: 0, zIndex: 60, background: "var(--dsw-alias-bg-overlay, #ffffff)", border: "1px solid var(--dsw-alias-border-l2, #c5c5c5)", borderRadius: 12, padding: "4px 12px 10px", width: 300, boxShadow: "0 8px 24px color-mix(in srgb, var(--dsw-alias-label-primary, #1a1a1a) 25%, transparent)" },
+      popupHead: { display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "8px 0 6px", borderBottom: "1px solid var(--dsw-alias-border-l1, #dcdcdc)" },
+      popupTitle: { fontSize: 12, fontWeight: 600, color: "var(--dsw-alias-label-primary, #1a1a1a)", margin: 0 },
+      popupMeta: { fontSize: 11, color: "var(--dsw-alias-label-secondary, #6b6b6b)" },
+      popupRow: { display: "flex", flexDirection: "column", gap: 5, padding: "8px 0", borderBottom: "1px solid var(--dsw-alias-border-l1, #dcdcdc)" },
       popupRowLast: { display: "flex", flexDirection: "column", gap: 5, padding: "8px 0 2px" },
       popupRowTop: { display: "flex", justifyContent: "space-between", alignItems: "baseline" },
-      popupRowName: { fontSize: 12, fontWeight: 600, color: "var(--dsw-alias-label-primary)" },
-      popupRowStats: { fontSize: 11, color: "var(--dsw-alias-label-secondary)" },
-      popupRowPct: { color: "var(--dsw-alias-label-primary)", fontWeight: 600 },
+      popupRowName: { fontSize: 12, fontWeight: 600, color: "var(--dsw-alias-label-primary, #1a1a1a)" },
+      popupRowStats: { fontSize: 11, color: "var(--dsw-alias-label-secondary, #6b6b6b)" },
+      popupRowPct: { color: "var(--dsw-alias-label-primary, #1a1a1a)", fontWeight: 600 },
       popupRowBottom: { display: "flex", alignItems: "center", gap: 8 },
-      popupTrack: { flex: 1, height: 6, borderRadius: 3, background: "var(--dsw-alias-border-l1)", overflow: "hidden" },
+      popupTrack: { flex: 1, height: 6, borderRadius: 3, background: "var(--dsw-alias-border-l1, #dcdcdc)", overflow: "hidden" },
       popupFill: { height: "100%", borderRadius: 3, transition: "width .2s ease" },
-      popupReset: { fontSize: 11, color: "var(--dsw-alias-label-secondary)", flexShrink: 0, minWidth: 64, textAlign: "right" },
+      popupReset: { fontSize: 11, color: "var(--dsw-alias-label-secondary, #6b6b6b)", flexShrink: 0, minWidth: 64, textAlign: "right" },
     };
+
+    // Squared variant: when the active theme zeroes app corners, our own
+    // rounded surfaces follow (cards, buttons, badges, tracks, popup).
+    const sqStyles = {
+      ...styles,
+      card: { ...styles.card, borderRadius: 0 },
+      button: { ...styles.button, borderRadius: 0 },
+      toggleBtn: { ...styles.toggleBtn, borderRadius: 0 },
+      badge: { ...styles.badge, borderRadius: 0 },
+      shareTrack: { ...styles.shareTrack, borderRadius: 0 },
+      shareFill: { ...styles.shareFill, borderRadius: 0 },
+      popup: { ...styles.popup, borderRadius: 0 },
+      popupTrack: { ...styles.popupTrack, borderRadius: 0 },
+      popupFill: { ...styles.popupFill, borderRadius: 0 },
+      bar: { ...styles.bar, borderRadius: 0 },
+    };
+    function useStyles() {
+      const square = useSquareCorner();
+      return square ? sqStyles : styles;
+    }
 
     function WindowCard(props) {
       const { name, limitUsd, w } = props;
+      const styles = useStyles();
       const percent = w && typeof w.percent === "number" ? w.percent : null;
       const pct = percent === null ? 0 : Math.max(0, Math.min(100, percent));
       const remain = percent === null ? null : Math.max(0, (100 - percent) / 100 * limitUsd);
@@ -166,6 +227,7 @@ window.__ModuleLoader__.load({
 
     function GoModelSection(props) {
       const { dsh } = props;
+      const styles = useStyles();
       const [detail, setDetail] = React.useState(false);
       if (!dsh) return null;
       const scanning = dsh.scanning === true;
@@ -254,7 +316,7 @@ window.__ModuleLoader__.load({
             React.createElement("div", { style: styles.spark },
               dsh.byDay.map((d, i) => React.createElement("div", {
                 key: i,
-                style: { ...styles.bar, height: maxDay > 0 ? Math.max(2, Math.round(d.cost / maxDay * 38)) : 2, background: d.cost > 0 ? "var(--dsw-alias-brand-primary)" : "var(--dsw-alias-bg-layer-2)" },
+                style: { ...styles.bar, height: maxDay > 0 ? Math.max(2, Math.round(d.cost / maxDay * 38)) : 2, background: d.cost > 0 ? "var(--dsw-alias-brand-primary, #4c6ef5)" : "var(--dsw-alias-bg-layer-2, #e9e9e9)" },
                 title: d.day + " " + fmtMoney4(d.cost),
               }))
             )
@@ -264,6 +326,7 @@ window.__ModuleLoader__.load({
     }
 
     function UsagePage(props) {
+      const styles = useStyles();
       const [state, setState] = React.useState({ kind: "loading" });
       const [dshData, setDshData] = React.useState(null);
       const pollRef = React.useRef(null);
@@ -340,6 +403,7 @@ window.__ModuleLoader__.load({
     }
 
     function DockLine(props) {
+      const styles = useStyles();
       const [data, setData] = React.useState(null);
       const [dirState, setDirState] = React.useState(null);
       const [hover, setHover] = React.useState(false);
@@ -399,7 +463,7 @@ window.__ModuleLoader__.load({
         onClick: onDockClick,
         title: "点击刷新用量",
       },
-        React.createElement(Ring, { percent: rollPct === null ? 0 : rollPct, size: 20, strokeWidth: 3.5, textSize: 0, trackColor: "var(--dsw-alias-border-l2)" }),
+        React.createElement(Ring, { percent: rollPct === null ? 0 : rollPct, size: 20, strokeWidth: 3.5, textSize: 0, trackColor: "var(--dsw-alias-border-l2, #c5c5c5)" }),
         React.createElement("span", { style: styles.dockTag }, "GO"),
         React.createElement("span", { style: styles.dockItem }, clicked ? "刷新中…" : "5h " + pctText(acc.rolling)),
         React.createElement("span", { style: styles.dockItem }, "周 " + pctText(acc.weekly)),
@@ -464,6 +528,22 @@ window.__ModuleLoader__.load({
       const slots = ctx.get("slots");
       if (slots === undefined) return;
 
+      // Theme corner sync: re-evaluate on theme changes (preference switch,
+      // override layers) and on body class flips (theme radius toggles).
+      ctx.effect(() => {
+        const offTheme = ctx.on ? ctx.on("theme/change", () => evaluateCorner()) : () => {};
+        let obs = null;
+        if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
+          obs = new MutationObserver(() => evaluateCorner());
+          obs.observe(document.body, { attributes: true, attributeFilter: ["class", "data-ds-dark-theme"] });
+        }
+        evaluateCorner();
+        return () => {
+          offTheme();
+          if (obs) obs.disconnect();
+        };
+      });
+
       slots.inject("settings.section", () => slots.register(
         { name: "settings.section", id: "opencode-go-usage", order: 40, label: () => "OpenCode GO 用量" },
         (props) => React.createElement(UsagePage, {})
@@ -479,3 +559,4 @@ window.__ModuleLoader__.load({
     return module.exports;
   }
 });
+

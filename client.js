@@ -102,27 +102,30 @@ window.__ModuleLoader__.load({
     const cornerListeners = new Set();
     const CORNER_PROBE_SELECTOR = '[class*="card" i], [class*="panel" i], [class*="dialog" i], [class*="modal" i], [class*="popover" i]';
     function evaluateCorner() {
-      let square = false;
-      let found = false;
       try {
         if (typeof document === "undefined") return;
         const els = document.querySelectorAll(CORNER_PROBE_SELECTOR);
+        let zero = 0;
+        let nonZero = 0;
         let sampled = 0;
         for (const el of els) {
-          if (sampled >= 5) break;
+          if (sampled >= 8) break;
           const r = window.getComputedStyle(el).borderRadius;
           const v = parseFloat(r);
-          if (Number.isFinite(v) && v > 0) { square = false; found = true; break; }
-          found = true;
+          if (Number.isFinite(v) && v > 0) nonZero++;
+          else zero++;
           sampled++;
         }
+        // Need enough samples; square only when a clear majority is zeroed.
+        if (sampled < 3) return;
+        const square = zero >= 3 && zero > nonZero;
+        console.log("[dsh-go] corner probe: sampled=" + sampled + " zero=" + zero + " nonZero=" + nonZero + " -> " + (square ? "square" : "round"));
+        if (square !== cornerState.square || !cornerState.known) {
+          cornerState.square = square;
+          cornerState.known = true;
+          cornerListeners.forEach((fn) => fn());
+        }
       } catch (e) { return; }
-      if (!found) return;
-      if (square !== cornerState.square || !cornerState.known) {
-        cornerState.square = square;
-        cornerState.known = true;
-        cornerListeners.forEach((fn) => fn());
-      }
     }
     // Throttled re-evaluation: DOM childList mutations (cards appearing) can
     // change the probe result, but we must not run getComputedStyle per frame.

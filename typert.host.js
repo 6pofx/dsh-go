@@ -37,6 +37,17 @@ const dshSchema = z.object({
   scanning: z.boolean(),
 });
 
+const priceEntrySchema = z.object({
+  model: z.string(),
+  tiered: z.boolean(),
+  in: z.number(),
+  out: z.number(),
+  cache: z.number(),
+  peakIn: z.number().nullable(),
+  peakOut: z.number().nullable(),
+  peakCache: z.number().nullable(),
+});
+
 const resultSchema = z.object({
   fetchedAt: z.number(),
   keySource: z.string().nullable(),
@@ -57,6 +68,7 @@ const resultSchema = z.object({
       models: z.number(),
     })
     .nullable(),
+  prices: z.array(priceEntrySchema),
   dsh: dshSchema.nullable(),
   dshError: z.string().nullable(),
 });

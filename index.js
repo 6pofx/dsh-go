@@ -140,6 +140,23 @@ export class OpencodeUsageGateway extends TypertRemoteService {
 
     const dshPayload = this.dshState.data || { models: [], byDay: [], scannedSessions: 0, durationMs: 0 };
     const ps = this.priceState;
+    const prices = Object.keys(ps.entries)
+      .sort()
+      .map((model) => {
+        const e = ps.entries[model];
+        const tiered = !!(e && e.offPeak && e.peak);
+        const base = tiered ? e.offPeak : (e && e.offPeak) || (e && e.peak) || e;
+        return {
+          model,
+          tiered,
+          in: base ? base.in : 0,
+          out: base ? base.out : 0,
+          cache: base ? base.cache : 0,
+          peakIn: tiered && e.peak ? e.peak.in : null,
+          peakOut: tiered && e.peak ? e.peak.out : null,
+          peakCache: tiered && e.peak ? e.peak.cache : null,
+        };
+      });
     return {
       fetchedAt: Date.now(),
       keySource: ki.source,
@@ -152,6 +169,7 @@ export class OpencodeUsageGateway extends TypertRemoteService {
         error: ps.error,
         models: Object.keys(ps.entries).length,
       },
+      prices,
       dsh: { ...dshPayload, scanning: this.dshState.scanning },
       dshError: this.dshState.data ? null : "scanning",
     };

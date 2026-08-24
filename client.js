@@ -388,6 +388,9 @@ window.__ModuleLoader__.load({
 
       const d = dshData || {};
       const acc = d.account;
+      const [showPrices, setShowPrices] = React.useState(false);
+      const fmtRate = (v) => v === null || v === undefined ? "—" : "$" + (Math.round(v * 1e6) / 1e6);
+      const prices = d.prices || [];
       const errMsg = (() => {
         if (d.accountError === "no-key") return "未找到 OpenCode API Key（凭据 OPENCODE_GO_API_KEY 或 auth.json）。";
         if (d.accountError === "unauthorized") return "API Key 无效或已过期（401）。";
@@ -404,9 +407,36 @@ window.__ModuleLoader__.load({
           React.createElement("span", { style: styles.badge }, "更新于 " + (d.fetchedAt ? new Date(d.fetchedAt).toLocaleTimeString() : "-")),
           React.createElement("span", { style: styles.badge }, d.price && d.price.source === "remote" ? "价格表: 官方(" + (d.price.fetchedAt ? new Date(d.price.fetchedAt).toLocaleTimeString() : "-") + ")" : "价格表: 内置兜底")
         ),
-        React.createElement("button", { style: styles.button, onClick: () => refresh(true) }, "刷新"),
+        React.createElement("div", { style: styles.row },
+          React.createElement("button", { style: styles.button, onClick: () => refresh(true) }, "刷新"),
+          React.createElement("button", { style: styles.button, onClick: () => setShowPrices(!showPrices) }, showPrices ? "收起价格表" : "查看价格表")
+        ),
         d.goInModels === false ? React.createElement("p", { style: styles.hint }, "提示：设置 → 模型 中未配置 opencode-go 提供方（仅提示，不影响本页查询）。") : null,
         errMsg ? React.createElement("p", { style: styles.error }, errMsg) : null,
+        showPrices && prices.length > 0 ? React.createElement("div", { style: styles.card },
+          React.createElement("div", { style: styles.cardBody },
+            React.createElement("div", { style: styles.cardHead },
+              React.createElement("h3", { style: styles.cardName }, "OpenCode GO 价格表"),
+              React.createElement("span", { style: styles.cardMeta }, "USD / 每 1M token · " + (d.price && d.price.source === "remote" ? (d.price.fetchedAt ? "官方同步于 " + new Date(d.price.fetchedAt).toLocaleString() : "官方") : "内置兜底表"))
+            ),
+            React.createElement("table", { style: styles.table },
+              React.createElement("thead", null, React.createElement("tr", null,
+                React.createElement("th", { style: styles.th }, "模型"),
+                React.createElement("th", { style: styles.th }, "输入"),
+                React.createElement("th", { style: styles.th }, "输出"),
+                React.createElement("th", { style: styles.th }, "缓存命中"),
+                React.createElement("th", { style: styles.th }, "高峰价（分档）")
+              )),
+              React.createElement("tbody", null, prices.map((p, i) => React.createElement("tr", { key: i },
+                React.createElement("td", { style: styles.td }, React.createElement("span", { style: styles.modelName }, p.model), p.tiered ? React.createElement("span", { style: styles.modelSub }, " · 分档") : null),
+                React.createElement("td", { style: styles.td }, fmtRate(p.in)),
+                React.createElement("td", { style: styles.td }, fmtRate(p.out)),
+                React.createElement("td", { style: styles.td }, fmtRate(p.cache)),
+                React.createElement("td", { style: styles.td }, p.tiered ? fmtRate(p.peakIn) + " / " + fmtRate(p.peakOut) + " / " + fmtRate(p.peakCache) : "—")
+              )))
+            )
+          )
+        ) : null,
         acc ? React.createElement("div", { style: styles.wrap },
           React.createElement(WindowCard, { name: "5 小时滚动（$12）", limitUsd: LIMITS.rolling, w: acc.rolling }),
           React.createElement(WindowCard, { name: "每周（$30，周一重置）", limitUsd: LIMITS.weekly, w: acc.weekly }),

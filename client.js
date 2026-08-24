@@ -344,6 +344,7 @@ window.__ModuleLoader__.load({
       const styles = useStyles();
       const [state, setState] = React.useState({ kind: "loading" });
       const [dshData, setDshData] = React.useState(null);
+      const [showPrices, setShowPrices] = React.useState(false);
       const pollRef = React.useRef(null);
       const refresh = React.useCallback((force) => {
         setState({ kind: "loading" });
@@ -388,7 +389,6 @@ window.__ModuleLoader__.load({
 
       const d = dshData || {};
       const acc = d.account;
-      const [showPrices, setShowPrices] = React.useState(false);
       const fmtRate = (v) => v === null || v === undefined ? "—" : "$" + (Math.round(v * 1e6) / 1e6);
       const prices = d.prices || [];
       const errMsg = (() => {

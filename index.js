@@ -19,7 +19,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { FALLBACK_PRICES, fetchGoPrices, priceFor } from "./go-prices.js";
+import { FALLBACK_PRICES, fetchGoPrices, priceTierAt } from "./go-prices.js";
 
 const DEFAULT_BASE_URL = "https://opencode.ai/zen/go/v1/usage";
 const DEFAULT_TIMEOUT_MS = 15000;

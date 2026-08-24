@@ -46,6 +46,14 @@ const resultSchema = z.object({
     })
     .nullable(),
   accountError: z.string().nullable(),
+  price: z
+    .object({
+      source: z.string(),
+      fetchedAt: z.number().nullable(),
+      error: z.string().nullable(),
+      models: z.number(),
+    })
+    .nullable(),
   dsh: dshSchema.nullable(),
   dshError: z.string().nullable(),
 });

@@ -1,6 +1,6 @@
 {
   "name": "dsh-go-usage",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "DeepSeek Harness plugin: OpenCode GO 套餐用量（三窗口额度 + DSH 按模型 token/金额统计 + 输入框迷你条）",
   "license": "MIT",
   "keywords": [
@@ -17,6 +17,7 @@
   "files": [
     "index.js",
     "client.js",
+    "go-prices.js",
     "typert.host.js",
     "cordis.patch.yml",
     "README.md",

@@ -398,7 +398,8 @@ window.__ModuleLoader__.load({
         React.createElement("div", { style: styles.metaRow },
           React.createElement("h2", { style: styles.title }, "OpenCode GO 用量"),
           React.createElement("span", { style: styles.badge }, d.keySource === "credentials" ? "Key: DSH 凭据" : d.keySource === "auth.json" ? "Key: auth.json" : "Key: 未配置"),
-          React.createElement("span", { style: styles.badge }, "更新于 " + (d.fetchedAt ? new Date(d.fetchedAt).toLocaleTimeString() : "-"))
+          React.createElement("span", { style: styles.badge }, "更新于 " + (d.fetchedAt ? new Date(d.fetchedAt).toLocaleTimeString() : "-")),
+          React.createElement("span", { style: styles.badge }, d.price && d.price.source === "remote" ? "价格表: 官方(" + (d.price.fetchedAt ? new Date(d.price.fetchedAt).toLocaleTimeString() : "-") + ")" : "价格表: 内置兜底")
         ),
         React.createElement("button", { style: styles.button, onClick: () => refresh(true) }, "刷新"),
         d.goInModels === false ? React.createElement("p", { style: styles.hint }, "提示：设置 → 模型 中未配置 opencode-go 提供方（仅提示，不影响本页查询）。") : null,
@@ -410,7 +411,9 @@ window.__ModuleLoader__.load({
         ) : null,
         d.dshError && !(d.dsh && d.dsh.scanning) ? React.createElement("p", { style: styles.hint }, "DSH 用量统计不可用：" + d.dshError) : null,
         React.createElement(GoModelSection, { dsh: d.dsh }),
-        React.createElement("p", { style: styles.hint }, "限额 $12/$30/$60 为展示参考，官方接口只返回百分比；账户级百分比包含所有设备的用量。")
+        React.createElement("p", { style: styles.hint }, d.price && d.price.source === "remote"
+            ? "金额按官方 GO 价格表估算（每 24h 自动同步，DeepSeek 按高峰/闲时分档计价）；限额 $12/$30/$60 为展示参考，官方接口只返回百分比。"
+            : "金额按内置兜底价格表估算（官方价格表拉取失败，稍后自动重试）；限额 $12/$30/$60 为展示参考，官方接口只返回百分比。")
       );
     }
 

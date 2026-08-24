@@ -19,36 +19,18 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { FALLBACK_PRICES, fetchGoPrices, priceFor } from "./go-prices.js";
 
 const DEFAULT_BASE_URL = "https://opencode.ai/zen/go/v1/usage";
 const DEFAULT_TIMEOUT_MS = 15000;
 const DSH_DAYS = 30;
 const DSH_INTERVAL = 300000;
+const PRICE_INTERVAL = 24 * 3600 * 1000;
 const QUICK_SCAN_LIMIT = 4;
 
 // Official OpenCode GO per-1M-token prices (go.mdx). Values in USD.
-const GO_PRICES = {
-  "deepseek-v4-flash": { in: 0.14, out: 0.28, cache: 0.0028 },
-  "deepseek-v4-pro": { in: 0.435, out: 0.87, cache: 0.003625 },
-  "kimi-k3": { in: 3.0, out: 15.0, cache: 0.30 },
-  "kimi-k2.7-code": { in: 0.95, out: 4.0, cache: 0.19 },
-  "kimi-k2.6": { in: 0.95, out: 4.0, cache: 0.16 },
-  "mimo-v2.5": { in: 0.14, out: 0.28, cache: 0.0028 },
-  "mimo-v2.5-pro": { in: 0.435, out: 0.87, cache: 0.003625 },
-  "minimax-m3": { in: 0.3, out: 1.2, cache: 0.06 },
-  "minimax-m2.7": { in: 0.3, out: 1.2, cache: 0.06 },
-  "minimax-m2.5": { in: 0.3, out: 1.2, cache: 0.06 },
-  "glm-5.3": { in: 1.4, out: 4.4, cache: 0.26 },
-  "glm-5.2": { in: 1.4, out: 4.4, cache: 0.26 },
-  "glm-5.1": { in: 1.4, out: 4.4, cache: 0.26 },
-  "qwen3.8-max": { in: 2.0, out: 6.0, cache: 0.25 },
-  "qwen3.7-max": { in: 2.5, out: 7.5, cache: 0.5 },
-  "qwen3.7-plus": { in: 0.4, out: 1.6, cache: 0.04 },
-  "qwen3.6-plus": { in: 0.5, out: 3.0, cache: 0.05 },
-  "gpt-5.6-luna": { in: 0.2, out: 1.2, cache: 0.02 },
-  "grok-4.5": { in: 2.0, out: 6.0, cache: 0.3 },
-  "hy3": { in: 0.14, out: 0.58, cache: 0.035 },
-};
+// Start from the static fallback; refresh from the official docs every 24h.
+const GO_PRICES = FALLBACK_PRICES;
 
 export const Config = z.object({
   baseUrl: z.string().default(DEFAULT_BASE_URL),
@@ -99,12 +81,45 @@ export class OpencodeUsageGateway extends TypertRemoteService {
     this.config = config ?? {};
     this.sessionAggs = new Map();
     this.dshState = { data: null, scanning: false, nextScan: 0 };
+    // Live price table: starts from the static fallback, refreshed from the
+    // official go.mdx every 24h. { entries, source: "remote"|"fallback", fetchedAt, error }.
+    this.priceState = { entries: GO_PRICES, source: "fallback", fetchedAt: null, error: null };
+    this.priceSyncing = false;
     ctx.effect(() => {
       this.ensureScan("full");
+      this.syncPrices();
       const timer = this.ctx.timer;
-      if (timer !== undefined) return timer.interval(() => this.ensureScan("full"), DSH_INTERVAL);
+      if (timer !== undefined) {
+        const stopScan = timer.interval(() => this.ensureScan("full"), DSH_INTERVAL);
+        const stopPrice = timer.interval(() => this.syncPrices(), PRICE_INTERVAL);
+        return () => { stopScan(); stopPrice(); };
+      }
       return () => {};
     });
+  }
+
+  // Refresh the price table from the official docs (fire-and-forget; the
+  // fallback table keeps estimates working while unrefreshed).
+  async syncPrices() {
+    if (this.priceSyncing) return;
+    this.priceSyncing = true;
+    try {
+      const r = await fetchGoPrices({ timeoutMs: this.config.timeoutMs || DEFAULT_TIMEOUT_MS });
+      if (r.entries && Object.keys(r.entries).length > 0) {
+        this.priceState = {
+          entries: { ...GO_PRICES, ...r.entries }, // remote wins; fallback fills models the docs dropped
+          source: "remote",
+          fetchedAt: Date.now(),
+          error: null,
+        };
+      } else {
+        this.priceState = { ...this.priceState, source: "fallback", error: r.error || "empty-table" };
+      }
+    } catch {
+      this.priceState = { ...this.priceState, source: "fallback", error: "fetch-failed" };
+    } finally {
+      this.priceSyncing = false;
+    }
   }
 
   async usage() {
@@ -124,12 +139,19 @@ export class OpencodeUsageGateway extends TypertRemoteService {
       : { account: null, error: "no-key" };
 
     const dshPayload = this.dshState.data || { models: [], byDay: [], scannedSessions: 0, durationMs: 0 };
+    const ps = this.priceState;
     return {
       fetchedAt: Date.now(),
       keySource: ki.source,
       goInModels,
       account: accountResult.account,
       accountError: accountResult.error,
+      price: {
+        source: ps.source,
+        fetchedAt: ps.fetchedAt,
+        error: ps.error,
+        models: Object.keys(ps.entries).length,
+      },
       dsh: { ...dshPayload, scanning: this.dshState.scanning },
       dshError: this.dshState.data ? null : "scanning",
     };
@@ -210,16 +232,19 @@ export class OpencodeUsageGateway extends TypertRemoteService {
       if (provider !== "opencode-go") continue;
       const model = src && typeof src.model === "string" ? src.model : "unknown";
       const u = ev.data.usage;
-      const b = byModel[model] || (byModel[model] = { count: 0, input: 0, output: 0, cacheRead: 0 });
+      const b = byModel[model] || (byModel[model] = { count: 0, input: 0, output: 0, cacheRead: 0, cost: 0 });
       b.count++;
       b.input += u.inputTokens || 0;
       b.output += u.outputTokens || 0;
       b.cacheRead += u.cacheReadTokens || 0;
-      const price = GO_PRICES[model];
+      // Time-aware pricing: DeepSeek peaks (01:00-04:00 / 06:00-10:00 UTC)
+      // are billed 2x; pick the tier by this event's timestamp.
+      const price = priceFor(this.priceState.entries, model, t);
       if (price) {
         const d = new Date(t);
         const day = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
         const cost = (u.inputTokens || 0) * price.in / 1e6 + (u.outputTokens || 0) * price.out / 1e6 + (u.cacheReadTokens || 0) * price.cache / 1e6;
+        b.cost += cost;
         dayCosts[day] = (dayCosts[day] || 0) + cost;
       }
     }
@@ -254,12 +279,13 @@ export class OpencodeUsageGateway extends TypertRemoteService {
     const totals = { byModel: {}, dayCosts: {} };
     for (const agg of this.sessionAggs.values()) {
       for (const model in agg.byModel) {
-        const s = totals.byModel[model] || (totals.byModel[model] = { count: 0, input: 0, output: 0, cacheRead: 0 });
+        const s = totals.byModel[model] || (totals.byModel[model] = { count: 0, input: 0, output: 0, cacheRead: 0, cost: 0 });
         const b = agg.byModel[model];
         s.count += b.count;
         s.input += b.input;
         s.output += b.output;
         s.cacheRead += b.cacheRead;
+        s.cost += b.cost || 0;
       }
       for (const day in agg.dayCosts) {
         totals.dayCosts[day] = (totals.dayCosts[day] || 0) + agg.dayCosts[day];
@@ -269,9 +295,8 @@ export class OpencodeUsageGateway extends TypertRemoteService {
       .map((model) => {
         const b = totals.byModel[model];
         const totalTokens = b.input + b.output + b.cacheRead;
-        const price = GO_PRICES[model];
-        const estRaw = price ? (b.input * price.in + b.output * price.out + b.cacheRead * price.cache) / 1e6 : null;
-        const estCost = estRaw === null ? null : Math.round(estRaw * 10000) / 10000;
+        // estCost was accumulated per-event with time-aware pricing in scanSession.
+        const estCost = b.cost > 0 ? Math.round(b.cost * 10000) / 10000 : null;
         return {
           model,
           count: b.count,

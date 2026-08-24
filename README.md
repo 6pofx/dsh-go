@@ -97,6 +97,7 @@ Host 端参数写在插件行上（`dsh plugin` 安装后如需自定义，编�
 | --- | --- | --- |
 | 账户级三窗口百分比 | `GET https://opencode.ai/zen/go/v1/usage`（Host `fetch` + Bearer key） | OpenCode 官方接口（未公开文档）；401=key 失效、403=无订阅。百分比含所有设备的用量 |
 | 按模型 Token / 金额 | DSH 会话日志（`ctx.sessionQuery.readSession`，后台扫描 + 5 分钟缓存） | Token 精确；金额按 OpenCode 官方 [GO 单价表](https://raw.githubusercontent.com/anomalyco/opencode/dev/packages/web/src/content/docs/go.mdx) 估算，**非账单金额** |
+| 官方价格表 | 启动时 + 每 24h 从官方 go.mdx 拉取并解析（GitHub raw 双源镜像，拉取失败回退内置表） | 价格自动跟随官方调价；**DeepSeek 按请求时间区分高峰 / 闲时计价**（高峰 01:00-04:00 / 06:00-10:00 UTC，价格 ×2）；页面标注价格表来源 |
 | API Key | `OPENCODE_GO_API_KEY` 凭据 → `~/.local/share/opencode/auth.json`（opencode-go → opencode 条目） | 自动解析，页面显示来源 |
 
 **重要说明**：官方接口只提供账户级百分比，不提供按模型拆分；按模型数据来自本机 DSH 会话日志，仅覆盖本机 DSH 产生的 GO 用量（其他设备 / opencode CLI 的用量不在此统计内）。
@@ -108,6 +109,7 @@ Host 端参数写在插件行上（`dsh plugin` 安装后如需自定义，编�
 ```
 dsh-go/
 ├── index.js          # Host 半：OpencodeUsageGateway（TypertRemoteService，方法 usage/refresh）
+├── go-prices.js      # 官方价格表：解析 go.mdx + 24h 自动拉取（undici + curl.exe 兜底）+ 内置兜底表
 ├── typert.host.js    # 手写 Typert host 清单（zod 结果 schema），exports["./typert"]
 ├── client.js         # 浏览器 bundle（window.__ModuleLoader__.load），挂载 Remote + 两个槽位
 ├── cordis.patch.yml  # 插件行（dsh.bundle.patch 自动注入）
@@ -125,7 +127,8 @@ dsh-go/
 
 - 用量接口未公开文档，可能变动；解析已做防御式处理，非 200 响应显示友好状态而非崩溃
 - 限额（$12 / $30 / $60）仅作展示参考，官方接口只返回百分比
-- 模型金额为按官方 GO 单价估算；DSH 日志仅覆盖本机 DSH 产生的用量
+- 模型金额为按官方 GO 单价估算（启动 + 24h 自动同步，失败回退内置表）；DSH 日志仅覆盖本机 DSH 产生的用量
+- DeepSeek 高峰/闲时分档按每条消息的时间戳计价，官方文档的峰值时段为准；分档上下文模型（如 GPT 5.6 Luna / Qwen3.7 Plus）取低价档估算
 - 迷你条仅在当前对话模型 provider 为 `opencode-go` 时显示
 
 ## 📚 参考

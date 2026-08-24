@@ -59,14 +59,24 @@ export function isPeakHour(t) {
 
 // Pick the effective flat price for modelId at time t.
 export function priceFor(entries, modelId, t) {
+  const r = priceTierAt(entries, modelId, t);
+  return r ? r.price : null;
+}
+
+// Like priceFor but also reports the applied tier:
+// "peak" / "offPeak" for dual-tier models, "flat" for the rest.
+export function priceTierAt(entries, modelId, t) {
   const e = entries[modelId];
   if (!e) return null;
   if (e.offPeak || e.peak) {
     const has = { offPeak: !!e.offPeak, peak: !!e.peak };
-    if (has.offPeak && has.peak) return isPeakHour(t) ? e.peak : e.offPeak;
-    return e.offPeak || e.peak; // single-tier entry
+    if (has.offPeak && has.peak) {
+      const peak = isPeakHour(t);
+      return { price: peak ? e.peak : e.offPeak, tier: peak ? "peak" : "offPeak" };
+    }
+    return { price: e.offPeak || e.peak, tier: "flat" }; // single-tier entry
   }
-  return e;
+  return { price: e, tier: "flat" };
 }
 
 // "DeepSeek V4 Flash (Off-Peak)" -> "deepseek-v4-flash"

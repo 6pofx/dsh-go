@@ -232,19 +232,23 @@ export class OpencodeUsageGateway extends TypertRemoteService {
       if (provider !== "opencode-go") continue;
       const model = src && typeof src.model === "string" ? src.model : "unknown";
       const u = ev.data.usage;
-      const b = byModel[model] || (byModel[model] = { count: 0, input: 0, output: 0, cacheRead: 0, cost: 0 });
+      const b = byModel[model] || (byModel[model] = { count: 0, input: 0, output: 0, cacheRead: 0, cost: 0, costPeak: 0, costOff: 0 });
       b.count++;
       b.input += u.inputTokens || 0;
       b.output += u.outputTokens || 0;
       b.cacheRead += u.cacheReadTokens || 0;
       // Time-aware pricing: DeepSeek peaks (01:00-04:00 / 06:00-10:00 UTC)
-      // are billed 2x; pick the tier by this event's timestamp.
-      const price = priceFor(this.priceState.entries, model, t);
-      if (price) {
+      // are billed 2x; pick the tier by this event's timestamp and keep the
+      // split so the UI can show peak vs off-peak contributions.
+      const tiered = priceTierAt(this.priceState.entries, model, t);
+      if (tiered) {
+        const price = tiered.price;
         const d = new Date(t);
         const day = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
         const cost = (u.inputTokens || 0) * price.in / 1e6 + (u.outputTokens || 0) * price.out / 1e6 + (u.cacheReadTokens || 0) * price.cache / 1e6;
         b.cost += cost;
+        if (tiered.tier === "peak") b.costPeak += cost;
+        else if (tiered.tier === "offPeak") b.costOff += cost;
         dayCosts[day] = (dayCosts[day] || 0) + cost;
       }
     }
@@ -279,13 +283,15 @@ export class OpencodeUsageGateway extends TypertRemoteService {
     const totals = { byModel: {}, dayCosts: {} };
     for (const agg of this.sessionAggs.values()) {
       for (const model in agg.byModel) {
-        const s = totals.byModel[model] || (totals.byModel[model] = { count: 0, input: 0, output: 0, cacheRead: 0, cost: 0 });
+        const s = totals.byModel[model] || (totals.byModel[model] = { count: 0, input: 0, output: 0, cacheRead: 0, cost: 0, costPeak: 0, costOff: 0 });
         const b = agg.byModel[model];
         s.count += b.count;
         s.input += b.input;
         s.output += b.output;
         s.cacheRead += b.cacheRead;
         s.cost += b.cost || 0;
+        s.costPeak += b.costPeak || 0;
+        s.costOff += b.costOff || 0;
       }
       for (const day in agg.dayCosts) {
         totals.dayCosts[day] = (totals.dayCosts[day] || 0) + agg.dayCosts[day];
@@ -297,6 +303,7 @@ export class OpencodeUsageGateway extends TypertRemoteService {
         const totalTokens = b.input + b.output + b.cacheRead;
         // estCost was accumulated per-event with time-aware pricing in scanSession.
         const estCost = b.cost > 0 ? Math.round(b.cost * 10000) / 10000 : null;
+        const tiered = b.costPeak > 0 || b.costOff > 0;
         return {
           model,
           count: b.count,
@@ -305,6 +312,9 @@ export class OpencodeUsageGateway extends TypertRemoteService {
           cacheReadTokens: b.cacheRead,
           totalTokens,
           estCost,
+          tiered,
+          costPeak: tiered ? Math.round(b.costPeak * 10000) / 10000 : null,
+          costOff: tiered ? Math.round(b.costOff * 10000) / 10000 : null,
         };
       })
       .sort((a, b) => (b.estCost || 0) - (a.estCost || 0));

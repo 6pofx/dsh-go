@@ -279,7 +279,7 @@ window.__ModuleLoader__.load({
         const cells = [];
         cells.push(React.createElement("td", { key: "m", style: styles.td },
           React.createElement("span", { style: styles.modelName }, m.model),
-          React.createElement("span", { style: styles.modelSub }, " · " + m.count + " 条")
+          React.createElement("span", { style: styles.modelSub }, " · " + m.count + " 条" + (m.tiered ? " · 分档计价" : ""))
         ));
         if (detail) {
           cells.push(React.createElement("td", { key: "i", style: styles.td }, fmtTokens(m.inputTokens)));
@@ -288,7 +288,10 @@ window.__ModuleLoader__.load({
         } else {
           cells.push(React.createElement("td", { key: "t", style: styles.td, title: "输入 " + fmtTokens(m.inputTokens) + " · 输出 " + fmtTokens(m.outputTokens) + " · 缓存 " + fmtTokens(m.cacheReadTokens) }, fmtTokens(m.totalTokens)));
         }
-        cells.push(React.createElement("td", { key: "amt", style: styles.td }, fmtMoney4(m.estCost)));
+        cells.push(React.createElement("td", { key: "amt", style: styles.td },
+          React.createElement("span", null, fmtMoney4(m.estCost)),
+          m.tiered && detail ? React.createElement("span", { style: styles.modelSub }, "高峰 " + fmtMoney4(m.costPeak) + " / 闲时 " + fmtMoney4(m.costOff)) : null
+        ));
         cells.push(React.createElement("td", { key: "share", style: styles.td },
           React.createElement("div", { style: styles.shareCell },
             React.createElement("div", { style: styles.shareTrack },
@@ -324,7 +327,7 @@ window.__ModuleLoader__.load({
         ),
         dsh.byDay && dsh.byDay.length > 1 && React.createElement("div", { style: styles.card },
           React.createElement("div", { style: styles.cardBody },
-            React.createElement("p", { style: styles.cardMeta }, "近 30 天每日 GO 花费（估算）"),
+            React.createElement("p", { style: styles.cardMeta }, "近 30 天每日 GO 花费（估算" + (models.some((m) => m.tiered) ? " · DeepSeek 按请求时段分档" : "") + "）"),
             React.createElement("div", { style: styles.spark },
               dsh.byDay.map((d, i) => React.createElement("div", {
                 key: i,
@@ -412,8 +415,8 @@ window.__ModuleLoader__.load({
         d.dshError && !(d.dsh && d.dsh.scanning) ? React.createElement("p", { style: styles.hint }, "DSH 用量统计不可用：" + d.dshError) : null,
         React.createElement(GoModelSection, { dsh: d.dsh }),
         React.createElement("p", { style: styles.hint }, d.price && d.price.source === "remote"
-            ? "金额按官方 GO 价格表估算（每 24h 自动同步，DeepSeek 按高峰/闲时分档计价）；限额 $12/$30/$60 为展示参考，官方接口只返回百分比。"
-            : "金额按内置兜底价格表估算（官方价格表拉取失败，稍后自动重试）；限额 $12/$30/$60 为展示参考，官方接口只返回百分比。")
+            ? "金额按官方 GO 价格表估算（每 24h 自动同步）；DeepSeek 按请求时段分档计价（高峰 01:00-04:00 / 06:00-10:00 UTC，价格 ×2），分档模型在详细模式拆分显示。限额 $12/$30/$60 为展示参考，官方接口只返回百分比。"
+            : "金额按内置兜底价格表估算（官方价格表拉取失败，稍后自动重试）；DeepSeek 按请求时段分档计价（高峰 ×2）。限额 $12/$30/$60 为展示参考，官方接口只返回百分比。")
       );
     }
 

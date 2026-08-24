@@ -19,6 +19,9 @@ const modelSchema = z.object({
   cacheReadTokens: z.number(),
   totalTokens: z.number(),
   estCost: z.number().nullable(),
+  tiered: z.boolean(),
+  costPeak: z.number().nullable(),
+  costOff: z.number().nullable(),
 });
 
 const daySchema = z.object({

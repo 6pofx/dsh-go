@@ -14,7 +14,11 @@
 import z from "@deepseek-ai/schemastery";
 import { TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
 import { credentialRef } from "@deepseek-ai/dsh-credentials";
-import { settingsNamespace } from "@deepseek-ai/dsh-settings";
+// Namespace import on purpose: DSH dropped the `settingsNamespace()` brand
+// helper in the 0.1.5-rc line. A named import would fail module linking on one
+// side of that change ("does not provide an export named ..."), so the helper
+// is feature-detected below and a single artifact serves old and new builds.
+import * as dshSettings from "@deepseek-ai/dsh-settings";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
@@ -27,6 +31,12 @@ const DSH_DAYS = 30;
 const DSH_INTERVAL = 300000;
 const PRICE_INTERVAL = 24 * 3600 * 1000;
 const QUICK_SCAN_LIMIT = 4;
+
+// Settings namespaces are branded strings at compile time, plain strings at
+// runtime. Older DSH builds expose `settingsNamespace(name)` to brand one; new
+// builds take the raw string. Call the helper when the export exists.
+const settingsNs = (name) =>
+  typeof dshSettings.settingsNamespace === "function" ? dshSettings.settingsNamespace(name) : name;
 
 // Official OpenCode GO per-1M-token prices (go.mdx). Values in USD.
 // Start from the static fallback; refresh from the official docs every 24h.
@@ -125,7 +135,7 @@ export class OpencodeUsageGateway extends TypertRemoteService {
   async usage() {
     let goInModels = null;
     try {
-      const pi = this.ctx.settings.get(settingsNamespace("llm-pi-ai"));
+      const pi = this.ctx.settings.get(settingsNs("llm-pi-ai"));
       goInModels = !!(pi && pi.providers && pi.providers["opencode-go"]);
     } catch {
       goInModels = null;

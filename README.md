@@ -115,14 +115,36 @@ dsh-go/
 ├── client.js         # 浏览器 bundle（window.__ModuleLoader__.load），挂载 Remote + 两个槽位
 ├── cordis.patch.yml  # 插件行（dsh.bundle.patch 自动注入）
 ├── package.json      # 双面声明：main + exports ./client ./typert + dsh.client + dsh.bundle
+├── test/             # 新旧 DSH 版本兼容测试（node test/compat.mjs）
 └── docs/dynamic-snapshot/   # 早期动态 Cordis 插件版本代码快照（已由正式版取代）
+```
+
+## 🔀 版本兼容
+
+一份产物同时适配 **DSH 0.1.0-rc 线（旧）** 与 **0.1.5-rc 线（新）**：
+
+| 接口 | 旧版（0.1.0-rc） | 新版（0.1.5-rc） | 本插件的做法 |
+| --- | --- | --- | --- |
+| `@deepseek-ai/dsh-settings` 的 `settingsNamespace()` | 导出，用于给命名空间打 brand | **已移除**，命名空间直接是字符串 | 用**命名空间导入 + 特性探测**：存在就调用，不存在就用原字符串。命名导入会让新版直接链接失败（`does not provide an export named …`），整块 Host 半都无法加载 |
+| `ctx.remote.$mount({package, descriptors})` | 有 | 有（形状未变） | 直接使用，`await` 后再取命名空间 |
+| Slots（`settings.section`、`conversation.composer.dock`） | 有 | 有（注册契约 `id/order/label` 未变） | 直接使用，`exports.inject = ["slots","remote"]` |
+| `./typert` 手写清单 | 校验通过 | 校验通过（`mode: "strict"` + zod v4） | 保持形状不变 |
+| `remote` 客户端服务提供者 | `dsh-api-remotes` | 迁移到 `dsh-api-gateway` | `dsh.client.inject` 两个都列（加载排序用，未安装的名字被忽略） |
+
+`peerDependencies` 里 DSH 各包写成 `*`：npm 的预发布版本匹配规则要求范围里出现**同一 `major.minor.patch` 元组**的预发布比较器，写死 `^0.1.0-rc.6` 会让 `0.1.5-rc.2` 报 peer 警告，反之亦然。
+
+回归验证（构建隔离测试台 + 真实新版包 + 旧版 `settingsNamespace` 模拟）：
+
+```sh
+node test/compat.mjs        # 或 npm test
+# host/current-DSH 11/11 · client/current-DSH 9/9 · host/legacy-DSH 6/6
 ```
 
 ## 🧩 开发
 
 - **Host 半**：`index.js` 是纯 Node ESM，`fetch` / `node:fs` 原生可用；RPC 通过 Typert Remote（`opencodeUsage/usage`、`opencodeUsage/refresh`）
 - **Client 半**：`client.js` 是手写 lazy-CJS bundle，`React.createElement` 渲染；所有颜色引用 `var(--dsw-alias-*, <兜底>)` 以自动适配任意主题（含魔改主题），圆角用通用元素探测跟随（无主题特化代码）
-- 本地改动后按「更新」流程重新打包安装
+- 本地改动后按「更新」流程重新打包安装，并跑一次 `node test/compat.mjs`
 
 ## ⚠️ 已知限制
 

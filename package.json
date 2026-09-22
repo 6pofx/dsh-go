@@ -6,12 +6,25 @@
   "keywords": [
     "deepseek-harness",
     "dsh",
+    "dsh-plugin",
     "plugin",
+    "client-plugin",
     "opencode",
     "opencode-go",
     "usage",
     "quota"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/6pofx/dsh-go.git"
+  },
+  "homepage": "https://github.com/6pofx/dsh-go#readme",
+  "bugs": {
+    "url": "https://github.com/6pofx/dsh-go/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "type": "module",
   "main": "./index.js",
   "scripts": {

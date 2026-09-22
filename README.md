@@ -40,7 +40,13 @@
 
 ## 🚀 安装
 
-插件已发布到 GitHub，推荐直接用 git 源安装（`dsh plugin` 走 pnpm，git 源没有 Windows 跨盘符路径问题）：
+已发布到 **npm**，推荐直接安装（插件同时适配 DSH 新旧两个 rc 线，见下节「版本兼容」）：
+
+```sh
+dsh plugin --profile web add dsh-go-usage
+```
+
+也可以走 git 源（`dsh plugin` 走 pnpm，git 源同样没有 Windows 跨盘符路径问题）：
 
 ```sh
 dsh plugin --profile web add github:6pofx/dsh-go
@@ -49,14 +55,14 @@ dsh plugin --profile web add github:6pofx/dsh-go
 本地开发 / 离线安装（tarball 流程，Windows 上 `link:` 目录依赖有 pnpm 盘符 bug，勿用目录直连）：
 
 ```sh
-# 1. 打包（产物为 dsh-go-usage-<版本>.tgz，如 dsh-go-usage-0.1.14.tgz）
+# 1. 打包（产物为 dsh-go-usage-<版本>.tgz，如 dsh-go-usage-0.1.20.tgz）
 npm pack
 
 # 2. 拷到 profile 目录
 cp dsh-go-usage-*.tgz $DSH_HOME/profiles/web/
 
 # 3. 首次安装需在 $DSH_HOME/profiles/web/package.json 的 dependencies 加入：
-#    "dsh-go-usage": "file:dsh-go-usage-0.1.14.tgz"
+#    "dsh-go-usage": "file:dsh-go-usage-0.1.20.tgz"
 
 # 4. 物化依赖 + 自动注册 bundle 层（reconcile）
 dsh plugin --profile web install
@@ -69,9 +75,9 @@ dsh plugin --profile web install
 ### 更新
 
 ```sh
-npm pack
-cp dsh-go-usage-*.tgz $DSH_HOME/profiles/web/
-dsh plugin --profile web install   # 或 git 源：dsh plugin --profile web update dsh-go
+dsh plugin --profile web update dsh-go-usage   # npm 源
+# 或 git 源：dsh plugin --profile web update dsh-go
+# 或 tarball：npm pack && cp dsh-go-usage-*.tgz $DSH_HOME/profiles/web/ && dsh plugin --profile web install
 # 重启 dsh web
 ```
 
@@ -84,7 +90,7 @@ Host 端参数写在插件行上（`dsh plugin` 安装后如需自定义，编�
 ```yaml
 - insert:
     - id: opencode-go-usage
-      name: dsh-go
+      name: dsh-go-usage
       config:
         baseUrl: https://opencode.ai/zen/go/v1/usage   # 默认
         timeoutMs: 15000                                # 默认

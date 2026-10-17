@@ -9,3 +9,6 @@ node_modules/
 
 # pnpm 锁文件（插件包不提交）
 pnpm-lock.yaml
+
+# 兼容测试台（node test/compat.mjs 生成，含转出模块与插件文件副本）
+.compat/

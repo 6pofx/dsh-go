@@ -18,7 +18,10 @@ window.__ModuleLoader__.load({
     // Client-side Remote contribution. The result codec is a pass-through
     // parser: the Host already validates the business result against its own
     // zod schema before it crosses the wire, and this side only needs the
-    // descriptor's strict shape to mount and call.
+    // descriptor's strict shape to mount and call. DSH 0.2.x strict codecs are
+    // `{ mode, typeSymbol, create() }` — the registry requires a `create`
+    // factory even when this face never parses a result itself.
+    const passThrough = () => ({ parse(value) { return value; } });
     const TYPERT_REMOTE = {
       package: "dsh-go-usage",
       descriptors: [
@@ -32,7 +35,7 @@ window.__ModuleLoader__.load({
           result: {
             mode: "strict",
             typeSymbol: "dsh-go-usage#OpencodeUsageResult",
-            schema: { parse(value) { return value; } },
+            create: passThrough,
           },
         },
         {
@@ -45,7 +48,7 @@ window.__ModuleLoader__.load({
           result: {
             mode: "strict",
             typeSymbol: "dsh-go-usage#RefreshResult",
-            schema: { parse(value) { return value; } },
+            create: passThrough,
           },
         },
       ],

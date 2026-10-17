@@ -1,6 +1,6 @@
 {
   "name": "dsh-go-usage",
-  "version": "0.1.20",
+  "version": "0.2.0",
   "description": "DeepSeek Harness plugin: OpenCode GO 套餐用量（三窗口额度 + DSH 按模型 token/金额统计 + 输入框迷你条）",
   "license": "MIT",
   "keywords": [
@@ -23,7 +23,8 @@
     "url": "https://github.com/6pofx/dsh-go/issues"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18",
+    "dsh": ">=0.2.1-rc.2 <0.3.0"
   },
   "type": "module",
   "main": "./index.js",
@@ -47,6 +48,7 @@
     "./package.json": "./package.json"
   },
   "dsh": {
+    "manifestVersion": 1,
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
@@ -54,7 +56,6 @@
       "inject": [
         "@deepseek-ai/dsh-api-gateway",
         "@deepseek-ai/dsh-api-remotes",
-        "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-ui-model-selection"
       ],
@@ -66,25 +67,16 @@
   },
   "peerDependencies": {
     "react": "^18.2.0",
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/schemastery": "*",
-    "@deepseek-ai/dsh-typert-protocol": "*",
-    "@deepseek-ai/dsh-credentials": "*",
-    "@deepseek-ai/dsh-settings": "*"
+    "@deepseek-ai/cordis": "~4.0.5",
+    "@deepseek-ai/schemastery": "~3.18.5",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.2.1-rc.2 <0.3.0",
+    "@deepseek-ai/dsh-credentials": ">=0.2.1-rc.2 <0.3.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "~4.0.5",
+    "@deepseek-ai/schemastery": "~3.18.5",
+    "@deepseek-ai/dsh-credentials": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-typert-loader": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.2"
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -14,11 +14,6 @@
 import z from "@deepseek-ai/schemastery";
 import { TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
 import { credentialRef } from "@deepseek-ai/dsh-credentials";
-// Namespace import on purpose: DSH dropped the `settingsNamespace()` brand
-// helper in the 0.1.5-rc line. A named import would fail module linking on one
-// side of that change ("does not provide an export named ..."), so the helper
-// is feature-detected below and a single artifact serves old and new builds.
-import * as dshSettings from "@deepseek-ai/dsh-settings";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
@@ -31,12 +26,46 @@ const DSH_DAYS = 30;
 const DSH_INTERVAL = 300000;
 const PRICE_INTERVAL = 24 * 3600 * 1000;
 const QUICK_SCAN_LIMIT = 4;
+const GO_PROVIDER = "opencode-go";
+// Settings → Models keeps provider profiles in the llm-pi-ai section, addressed
+// by section id on every DSH line this plugin supports.
+const GO_SETTINGS_NS = "llm-pi-ai";
 
-// Settings namespaces are branded strings at compile time, plain strings at
-// runtime. Older DSH builds expose `settingsNamespace(name)` to brand one; new
-// builds take the raw string. Call the helper when the export exists.
-const settingsNs = (name) =>
-  typeof dshSettings.settingsNamespace === "function" ? dshSettings.settingsNamespace(name) : name;
+/**
+ * Whether Settings → Models carries an `opencode-go` provider profile.
+ *
+ * DSH 0.2.x replaced the settings service's raw `get(namespace)` reader with
+ * `SettingsForms` (`describe`/`update`/`mutate`), so the old probe throws. Try
+ * the live LLM route directory first — it answers from the mounted adapters and
+ * is the shortest truthful answer — then the 0.2.x form descriptors, then the
+ * legacy raw reader. Returns null when no source can answer.
+ */
+function detectGoInModels(ctx) {
+  try {
+    const llm = ctx.get("llm");
+    if (llm !== undefined && typeof llm.listProviders === "function") {
+      const routes = llm.listProviders() || [];
+      return routes.some((route) => route && route.id === GO_PROVIDER);
+    }
+  } catch {
+    /* fall through to the settings probes */
+  }
+  try {
+    const settings = ctx.settings;
+    if (settings !== undefined && typeof settings.get === "function") {
+      const section = settings.get(GO_SETTINGS_NS);
+      return !!(section && section.providers && section.providers[GO_PROVIDER]);
+    }
+    if (settings !== undefined && typeof settings.describe === "function") {
+      const descriptor = (settings.describe() || []).find((entry) => entry && entry.ns === GO_SETTINGS_NS);
+      const section = descriptor && descriptor.value;
+      return !!(section && section.providers && section.providers[GO_PROVIDER]);
+    }
+  } catch {
+    /* feature is advisory only */
+  }
+  return null;
+}
 
 // Official OpenCode GO per-1M-token prices (go.mdx). Values in USD.
 // Start from the static fallback; refresh from the official docs every 24h.
@@ -133,13 +162,7 @@ export class OpencodeUsageGateway extends TypertRemoteService {
   }
 
   async usage() {
-    let goInModels = null;
-    try {
-      const pi = this.ctx.settings.get(settingsNs("llm-pi-ai"));
-      goInModels = !!(pi && pi.providers && pi.providers["opencode-go"]);
-    } catch {
-      goInModels = null;
-    }
+    const goInModels = detectGoInModels(this.ctx);
 
     // No account cache: every call refetches the official API so fetchedAt is
     // always fresh (the account call is cheap; the DSH aggregate stays cached).

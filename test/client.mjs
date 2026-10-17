@@ -1,9 +1,13 @@
-// Compatibility check: dsh-go-usage CLIENT half against the current module
-// loader contract (window.__ModuleLoader__.load) and the current client
-// services/Slots (slots, remote, timer, theme/change).
+// Compatibility check: dsh-go-usage CLIENT half against the DSH 0.2.x client
+// contracts — the module-loader bundle format
+// (`window.__ModuleLoader__.load({ id, factory })`), the `slots`/`remote`/
+// `timer`/`theme-change` services, the Remote contribution shape the 0.2.x
+// gateway validates, and a render smoke test of both slots.
 //
-// Runs the real bundle body with a minimal React + cordis + browser stub, then
-// renders the settings page and the composer dock to settle their effects.
+// Runs the real bundle body with a minimal React + cordis + browser stub.
+// Imported by `node test/compat.mjs`; runnable standalone too.
+import { pathToFileURL } from "node:url";
+
 const results = [];
 const check = (name, ok, detail) => {
   results.push({ name, ok });
@@ -140,7 +144,18 @@ ctx.remote = { $mount: async (contribution) => { mounted.push(contribution); ret
 
 exportsObj.apply(ctx);
 
-check("mounts the opencodeUsage Remote contribution", mounted.length === 1 && mounted[0].package === "dsh-go-usage" && mounted[0].descriptors.length === 2, JSON.stringify(mounted.map((m) => m.package)));
+// The 0.2.x Remote registry rejects any strict codec without a create()
+// factory, so the mounted contribution must carry one on every descriptor.
+const descriptors = mounted[0] ? mounted[0].descriptors : [];
+const strictResult = (codec) =>
+  !!codec &&
+  codec.mode === "strict" &&
+  typeof codec.typeSymbol === "string" &&
+  codec.typeSymbol.length > 0 &&
+  typeof codec.create === "function";
+check("mounts the opencodeUsage Remote contribution", mounted.length === 1 && mounted[0].package === "dsh-go-usage" && descriptors.length === 2, JSON.stringify(mounted.map((m) => m.package)));
+check("client result codecs expose create() (0.2.x rule)", descriptors.every((d) => strictResult(d.result)), descriptors.map((d) => d.id).join(", "));
+check("client result codecs parse as pass-through", descriptors.every((d) => d.result.create().parse({ ok: true }).ok === true), "");
 check("registers settings.section page", registered.some((r) => r.options.name === "settings.section" && r.options.id === "opencode-go-usage"), JSON.stringify(registered.map((r) => r.options.name)));
 check("registers conversation.composer.dock line", registered.some((r) => r.options.name === "conversation.composer.dock"), JSON.stringify(registered.map((r) => r.options.name)));
 check("subscribes theme/change for corner sync", listened.includes("theme/change"), JSON.stringify(listened));
@@ -166,4 +181,5 @@ try {
 
 const failed = results.filter((r) => !r.ok);
 console.log(`--- client: ${results.length - failed.length}/${results.length} passed ---`);
-process.exit(failed.length === 0 ? 0 : 2);
+export const summary = { passed: results.length - failed.length, failed: failed.length, failedNames: failed.map((r) => r.name) };
+if (import.meta.url === pathToFileURL(process.argv[1] || "").href) process.exitCode = failed.length === 0 ? 0 : 2;

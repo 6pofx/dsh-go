@@ -3,6 +3,11 @@
 // registers it into ctx.typert.local, which the Host gateway uses to claim
 // and dispatch the "opencodeUsage/usage" and "opencodeUsage/refresh"
 // endpoints in strict mode.
+//
+// DSH 0.2.x strict codecs are `{ mode, typeSymbol, create() }`: the registry
+// validates `create` as a factory and only calls it when a parser is needed
+// (`typert: … strict codec has no create() factory` otherwise — a failure that
+// withdraws every strict definition and breaks the whole client connection).
 import { z } from "zod";
 
 const windowSchema = z.object({
@@ -88,7 +93,7 @@ export const TYPERT = {
       result: {
         mode: "strict",
         typeSymbol: "dsh-go-usage#OpencodeUsageResult",
-        schema: resultSchema,
+        create: () => resultSchema,
       },
     },
     {
@@ -101,7 +106,7 @@ export const TYPERT = {
       result: {
         mode: "strict",
         typeSymbol: "dsh-go-usage#RefreshResult",
-        schema: z.object({ triggered: z.boolean() }),
+        create: () => z.object({ triggered: z.boolean() }),
       },
     },
   ],

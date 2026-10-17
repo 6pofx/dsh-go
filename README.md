@@ -40,7 +40,7 @@
 
 ## 🚀 安装
 
-已发布到 **npm**，推荐直接安装（插件同时适配 DSH 新旧两个 rc 线，见下节「版本兼容」）：
+已发布到 **npm**，推荐直接安装（本版本面向 DSH **0.2.1**，见下节「版本兼容」）：
 
 ```sh
 dsh plugin --profile web add dsh-go-usage
@@ -55,14 +55,14 @@ dsh plugin --profile web add github:6pofx/dsh-go
 本地开发 / 离线安装（tarball 流程，Windows 上 `link:` 目录依赖有 pnpm 盘符 bug，勿用目录直连）：
 
 ```sh
-# 1. 打包（产物为 dsh-go-usage-<版本>.tgz，如 dsh-go-usage-0.1.20.tgz）
+# 1. 打包（产物为 dsh-go-usage-<版本>.tgz，如 dsh-go-usage-0.2.0.tgz）
 npm pack
 
 # 2. 拷到 profile 目录
 cp dsh-go-usage-*.tgz $DSH_HOME/profiles/web/
 
 # 3. 首次安装需在 $DSH_HOME/profiles/web/package.json 的 dependencies 加入：
-#    "dsh-go-usage": "file:dsh-go-usage-0.1.20.tgz"
+#    "dsh-go-usage": "file:dsh-go-usage-0.2.0.tgz"
 
 # 4. 物化依赖 + 自动注册 bundle 层（reconcile）
 dsh plugin --profile web install
@@ -121,30 +121,34 @@ dsh-go/
 ├── client.js         # 浏览器 bundle（window.__ModuleLoader__.load），挂载 Remote + 两个槽位
 ├── cordis.patch.yml  # 插件行（dsh.bundle.patch 自动注入）
 ├── package.json      # 双面声明：main + exports ./client ./typert + dsh.client + dsh.bundle
-├── test/             # 新旧 DSH 版本兼容测试（node test/compat.mjs）
+├── test/             # DSH 0.2.1 契约回归测试（node test/compat.mjs，在 .compat/ 生成转出模块对接已安装的 DSH）
 └── docs/dynamic-snapshot/   # 早期动态 Cordis 插件版本代码快照（已由正式版取代）
 ```
 
 ## 🔀 版本兼容
 
-一份产物同时适配 **DSH 0.1.0-rc 线（旧）** 与 **0.1.5-rc 线（新）**：
+**0.2.0 起面向 DSH 0.2.1 线**（`engines.dsh = ">=0.2.1-rc.2 <0.3.0"`）。0.1.x 系列面向 0.1.0 ~ 0.1.5-rc 线，两者不通用。
 
-| 接口 | 旧版（0.1.0-rc） | 新版（0.1.5-rc） | 本插件的做法 |
+0.2.1 改了三处本插件依赖的契约：
+
+| 接口 | 0.1.x 线 | 0.2.1 线 | 本插件的做法 |
 | --- | --- | --- | --- |
-| `@deepseek-ai/dsh-settings` 的 `settingsNamespace()` | 导出，用于给命名空间打 brand | **已移除**，命名空间直接是字符串 | 用**命名空间导入 + 特性探测**：存在就调用，不存在就用原字符串。命名导入会让新版直接链接失败（`does not provide an export named …`），整块 Host 半都无法加载 |
-| `ctx.remote.$mount({package, descriptors})` | 有 | 有（形状未变） | 直接使用，`await` 后再取命名空间 |
-| Slots（`settings.section`、`conversation.composer.dock`） | 有 | 有（注册契约 `id/order/label` 未变） | 直接使用，`exports.inject = ["slots","remote"]` |
-| `./typert` 手写清单 | 校验通过 | 校验通过（`mode: "strict"` + zod v4） | 保持形状不变 |
-| `remote` 客户端服务提供者 | `dsh-api-remotes` | 迁移到 `dsh-api-gateway` | `dsh.client.inject` 两个都列（加载排序用，未安装的名字被忽略） |
+| Typert strict codec | `{ mode, typeSymbol, schema }` | **`{ mode, typeSymbol, create() }`**：注册表要求 `create` 是工厂，缺了就抛 `… strict codec has no create() factory`。该异常会让 typert gateway **撤回全部 strict 定义**（`SRC fallback is forbidden`），客户端 `session/control` 流随之打不开 —— 网页端表现为「暂无会话、无法操作」，而不只是本插件不可用 | `typert.host.js` 与 `client.js` 的每个 result codec 都改成 `create: () => zodSchema`（client 侧用直通 parser） |
+| `ctx.settings` | 直接 `get(namespace)` 读原始配置 | 换成 `SettingsForms`（`describe/update/mutate`），**没有 `get()`** | 「设置 → 模型里有没有 `opencode-go`」改为多路探测：先用 `ctx.llm.listProviders()` 的实时路由，再退到 `settings.describe()` 的描述符，最后兜底旧版 `settings.get()`；全都不可用就返回 `null`（仅提示文案） |
+| `dsh.client.inject` | 列 `@deepseek-ai/dsh-client-runtime` | 该包已不存在（`remote` 服务由 `dsh-api-gateway` 提供） | 注入列表同步为 `dsh-api-gateway` / `dsh-api-remotes` / `dsh-client-ui-settings` / `dsh-client-ui-model-selection` |
 
-`peerDependencies` 里 DSH 各包写成 `*`：npm 的预发布版本匹配规则要求范围里出现**同一 `major.minor.patch` 元组**的预发布比较器，写死 `^0.1.0-rc.6` 会让 `0.1.5-rc.2` 报 peer 警告，反之亦然。
+下列契约 0.2.1 **未变**，因此代码保持原样：`window.__ModuleLoader__.load({id, factory})` bundle 格式、`ctx.remote.$mount({package, descriptors})`、Slots（`settings.section` 的 `id/order/label`、`conversation.composer.dock`、`theme/change`）、`ctx.sessionQuery.listSessions/readSession`、`ctx.credentials.resolve(credentialRef(...))`、`ctx.timer.interval`、`./typert` 导出约定、`dsh.bundle.patch` 自动注入。
 
-回归验证（构建隔离测试台 + 真实新版包 + 旧版 `settingsNamespace` 模拟）：
+> 如果你在 0.2.1 上从 0.1.x 升级并曾因上面的 codec 报错把插件行 `disabled: true` 掉：升级到 0.2.0 后请把 `$DSH_HOME/profiles/web/cordis.patch.yml` 里 `opencode-go-usage` 的 `disabled` 删掉或改为 `false`，再重启 `dsh web`。
+
+回归验证（隔离测试台直接对接**已安装**的 DSH 0.2.1 包；不联网、不需要 key）：
 
 ```sh
 node test/compat.mjs        # 或 npm test
-# host/current-DSH 11/11 · client/current-DSH 9/9 · host/legacy-DSH 6/6
+# host 17/17 · client 11/11
 ```
+
+测试台不软链、不安装依赖：它在 `.compat/` 下为每个 `@deepseek-ai/*` 生成两行 `export *` 转出模块指向已安装的包（沙箱里禁止建符号链接时同样可跑），因此校验的是真实运行环境的版本。
 
 ## 🧩 开发
 
